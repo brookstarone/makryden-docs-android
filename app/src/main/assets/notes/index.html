@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E0A1A">
+<title>Makryden Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-view="list">
+
+<!-- ============ AUTH ============ -->
+<div id="auth-screen" hidden>
+  <div class="auth-card">
+    <div class="auth-brand">
+      <div class="auth-mark">M</div>
+      <div>
+        <h1>Makryden Notes</h1>
+        <p>One login across the board.</p>
+      </div>
+    </div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-tab="signin">Sign in</button>
+      <button class="auth-tab" data-tab="signup">Create account</button>
+    </div>
+    <form id="auth-form" autocomplete="on">
+      <label class="field">
+        <span>Email</span>
+        <input type="email" id="auth-email" required autocomplete="email" placeholder="you@example.com">
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input type="password" id="auth-password" required autocomplete="current-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" minlength="6">
+      </label>
+      <p class="auth-error" id="auth-error" hidden></p>
+      <button type="submit" class="btn btn-gold btn-block" id="auth-submit">Sign in</button>
+    </form>
+    <div class="auth-links">
+      <button class="link" id="forgot-link">Forgot password?</button>
+      <button class="link" id="resend-link">Didn't get the confirmation email? Resend it</button>
+    </div>
+    <p class="auth-note">The same Makryden account you use for the parent portal and Writer. Passwords are hashed and never logged.</p>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" hidden>
+  <div class="topbar">
+    <button id="menu-btn" class="icon-btn" aria-label="Folders">&#9776;</button>
+    <button id="back-btn" class="icon-btn" aria-label="Back to Docs" title="Back to Docs">&larr;</button>
+    <div class="topbar-title">Makryden Notes</div>
+    <div class="topbar-actions">
+      <span class="save-state" id="save-state"></span>
+      <button id="new-note-btn" class="btn btn-gold btn-sm">+ New note</button>
+      <button id="account-btn" class="icon-btn avatar" aria-label="Account">?</button>
+    </div>
+    <div id="account-menu" class="account-menu" hidden>
+      <div class="account-email" id="account-email"></div>
+      <button class="menu-item" id="change-pw-btn">Change password</button>
+      <button class="menu-item" id="signout-btn">Sign out</button>
+      <button class="menu-item danger" id="signout-all-btn">Sign out everywhere</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- Sidebar: folders -->
+    <aside id="sidebar">
+      <div class="sidebar-head">
+        <h2>Folders</h2>
+        <button id="new-folder-btn" class="icon-btn" aria-label="New folder" title="New folder">+</button>
+      </div>
+      <nav id="folder-list">
+        <button class="folder-item active" data-folder="all"><span class="folder-name">All notes</span><span class="folder-count" id="count-all"></span></button>
+        <button class="folder-item" data-folder="unfiled"><span class="folder-name">Unfiled</span><span class="folder-count" id="count-unfiled"></span></button>
+      </nav>
+      <div id="folder-custom"></div>
+      <div class="sidebar-foot">
+        <div class="sidebar-tag-filter" id="sidebar-tag-filter" hidden>
+          <span>Tag: <strong id="active-tag-name"></strong></span>
+          <button class="link" id="clear-tag-filter">Clear</button>
+        </div>
+      </div>
+    </aside>
+    <div id="sidebar-scrim" hidden></div>
+
+    <!-- Note list -->
+    <section id="list-pane">
+      <div class="search-wrap">
+        <input type="search" id="search" placeholder="Search notes&hellip;" autocomplete="off">
+      </div>
+      <div id="tag-filter-bar" class="tag-filter-bar" hidden>
+        <span>Showing notes tagged <strong id="tag-filter-name"></strong></span>
+        <button class="link" id="clear-tag-filter-2">Clear</button>
+      </div>
+      <div id="note-list" class="note-list"></div>
+      <div id="list-empty" class="empty" hidden>
+        <p class="empty-title">No notes yet</p>
+        <p>Capture the idea, the list, the half-sentence at 1am.</p>
+        <button class="btn btn-gold" id="empty-new-btn">Write your first note</button>
+      </div>
+    </section>
+
+    <!-- Editor -->
+    <section id="editor-pane" hidden>
+      <div class="editor-top">
+        <input id="note-title" maxlength="500" placeholder="Title" autocomplete="off">
+        <div class="editor-meta">
+          <button id="share-export-btn" class="icon-btn" title="Share / Export" aria-label="Share or export note">&#10548;</button>
+          <button id="pin-btn" class="icon-btn" title="Pin note" aria-label="Pin note">&#9734;</button>
+          <select id="folder-select" title="Folder"></select>
+          <button id="delete-note-btn" class="icon-btn danger" title="Delete note" aria-label="Delete note">&#128465;</button>
+        </div>
+        <div id="share-menu" class="share-menu" hidden>
+          <button data-act="share">&#128228; Share&hellip;</button>
+          <button data-act="email">&#9993;&#65039; Email</button>
+          <button data-act="md">&#128196; Markdown (.md)</button>
+          <button data-act="txt">&#128221; Text (.txt)</button>
+          <button data-act="html">&#127760; HTML (.html)</button>
+          <button data-act="print">&#128424;&#65039; Print / PDF</button>
+        </div>
+      </div>
+      <div class="tag-editor">
+        <div id="tag-chips" class="tag-chips"></div>
+        <input id="tag-input" placeholder="+ add tag (Enter)" maxlength="60" autocomplete="off">
+      </div>
+      <div class="toolbar" id="toolbar" role="toolbar" aria-label="Formatting">
+        <button data-cmd="undo" title="Undo">&#8617;</button>
+        <button data-cmd="redo" title="Redo">&#8620;</button>
+        <span class="tb-sep"></span>
+        <button data-cmd="h1" title="Heading 1"><b>H1</b></button>
+        <button data-cmd="h2" title="Heading 2"><b>H2</b></button>
+        <span class="tb-sep"></span>
+        <button data-cmd="bold" title="Bold"><b>B</b></button>
+        <button data-cmd="italic" title="Italic"><i>I</i></button>
+        <button data-cmd="strike" title="Strikethrough"><s>S</s></button>
+        <span class="tb-sep"></span>
+        <button data-cmd="bullet" title="Bullet list">&bull;&equiv;</button>
+        <button data-cmd="ordered" title="Numbered list">1&equiv;</button>
+        <button data-cmd="quote" title="Quote">&#10013;</button>
+      </div>
+      <div id="editor" class="editor"></div>
+      <div class="attachments">
+        <div class="attachments-head">
+          <h3>Attachments</h3>
+          <button class="btn btn-sm" id="upload-btn" type="button">Upload</button>
+        </div>
+        <div id="upload-progress" class="upload-progress" hidden>
+          <div class="upload-bar"><div id="upload-fill"></div></div>
+          <span id="upload-label"></span>
+        </div>
+        <ul id="attachment-list" class="attachment-list"></ul>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+<div id="modal-root"></div>
+
+<script src="app.bundle.js"></script>
+</body>
+</html>
