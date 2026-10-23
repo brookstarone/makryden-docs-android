@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Deep purple background -->
+    <path
+        android:fillColor="#160F2B"
+        android:pathData="M0,0h108v108h-108z" />
+    <!-- Gold document page with folded corner -->
+    <path
+        android:fillColor="#E8C266"
+        android:pathData="M38,26h24l12,12v44h-36z" />
+    <path
+        android:fillColor="#B8944A"
+        android:pathData="M62,26v12h12z" />
+    <!-- Text lines -->
+    <path
+        android:fillColor="#160F2B"
+        android:pathData="M44,48h24v3h-24z" />
+    <path
+        android:fillColor="#160F2B"
+        android:pathData="M44,55h24v3h-24z" />
+    <path
+        android:fillColor="#160F2B"
+        android:pathData="M44,62h16v3h-16z" />
+</vector>
