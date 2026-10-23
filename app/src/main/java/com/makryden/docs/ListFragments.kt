@@ -83,7 +83,11 @@ abstract class BaseListFragment : Fragment() {
         val session = SessionStore(requireContext())
         val token = session.getAccessToken()
         if (token == null) {
-            showEmpty()
+            // Not signed in - go to auth
+            progress.visibility = View.GONE
+            swipeRefresh.isRefreshing = false
+            val intent = android.content.Intent(requireContext(), AuthActivity::class.java)
+            startActivity(intent)
             return
         }
         progress.visibility = View.VISIBLE
@@ -101,8 +105,16 @@ abstract class BaseListFragment : Fragment() {
                 activity?.runOnUiThread {
                     progress.visibility = View.GONE
                     swipeRefresh.isRefreshing = false
-                    showEmpty()
-                    Toast.makeText(requireContext(), "Could not load: ${e.message}", Toast.LENGTH_SHORT).show()
+                    val msg = e.message ?: ""
+                    if (msg.contains("401") || msg.contains("unauthorized") || msg.contains("JWT")) {
+                        // Session expired - clear and go to auth
+                        SessionStore(requireContext()).clear()
+                        val intent = android.content.Intent(requireContext(), AuthActivity::class.java)
+                        startActivity(intent)
+                    } else {
+                        showEmpty()
+                        Toast.makeText(requireContext(), "Could not load: $msg", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }.start()
