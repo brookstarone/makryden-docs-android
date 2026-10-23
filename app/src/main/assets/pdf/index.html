@@ -437,6 +437,93 @@
       @media (min-width:901px){
         #btnPagesPanel, #btnSidePanel{ display:none; }
       }
+    
+      /* ============ Mobile-first layout (max-width:768px) ============ */
+      #fabAnnotate, #fabMenu, #mobileTabs{ display:none; }
+      @media (max-width:768px){
+        /* --- Top bar: back + Open + Export only --- */
+        #toolbar #btnMerge,
+        #toolbar #btnSharePdf,
+        #toolbar #btnEmailPdf,
+        #toolbar #btnPrintPdf,
+        #toolbar #toolGroup,
+        #toolbar #fieldGroup,
+        #toolbar #btnPagesPanel,
+        #toolbar #btnSidePanel,
+        #toolbar #zoomOut,
+        #toolbar #zoomIn,
+        #toolbar #zoomFit,
+        #toolbar #zoomVal,
+        #toolbar .tb-sep,
+        #toolbar .tb-spacer{ display:none !important; }
+        #toolbar{ flex-wrap:nowrap; padding:8px 10px; gap:6px; }
+        #toolbar .btn{ padding:7px 10px; white-space:nowrap; }
+
+        /* --- Panels become bottom sheets --- */
+        #pagesPanel, #sidePanel{
+          top:auto !important; bottom:78px !important;
+          left:10px !important; right:10px !important;
+          width:auto !important; max-height:54vh !important;
+          border-radius:14px; border:1px solid var(--line);
+        }
+
+        /* --- Room for the tab bar --- */
+        #viewer{ padding-bottom:8px; }
+        #main{ padding-bottom:64px; }
+        #statusbar{ display:none; }
+
+        /* --- Floating action button --- */
+        #fabAnnotate{
+          display:flex; align-items:center; justify-content:center;
+          position:fixed; right:16px; bottom:88px; z-index:70;
+          width:60px; height:60px; border-radius:50%;
+          background:var(--gold); color:var(--gold-ink);
+          border:none; font-size:34px; font-weight:300; line-height:1;
+          box-shadow:0 4px 18px rgba(0,0,0,.5);
+          cursor:pointer; transition:transform .18s ease;
+          padding:0;
+        }
+        #fabAnnotate.open{ transform:rotate(45deg); }
+
+        /* --- FAB tool menu --- */
+        #fabMenu{
+          display:none;
+          position:fixed; right:16px; bottom:160px; z-index:70;
+          flex-direction:column; gap:8px; align-items:stretch;
+          max-height:52vh; overflow-y:auto;
+          background:var(--panel); border:1px solid var(--line);
+          border-radius:14px; padding:10px;
+          box-shadow:0 8px 28px rgba(0,0,0,.5);
+          min-width:172px;
+        }
+        #fabMenu.open{ display:flex; }
+        .fab-item{
+          display:flex; align-items:center; gap:10px;
+          background:transparent; color:var(--ink);
+          border:1px solid transparent; border-radius:10px;
+          padding:9px 12px; font-size:14px; font-weight:600;
+          cursor:pointer; text-align:left; white-space:nowrap;
+        }
+        .fab-item:active{ background:var(--gold-soft, rgba(232,194,102,.14)); }
+        .fab-item .ic{ width:20px; height:20px; flex:none; }
+        .fab-item.on{ border-color:var(--gold); color:var(--gold); }
+
+        /* --- Bottom tab bar --- */
+        #mobileTabs{
+          display:flex;
+          position:fixed; left:0; right:0; bottom:0; z-index:65;
+          background:var(--panel); border-top:1px solid var(--line);
+          padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+        }
+        #mobileTabs .mtab{
+          flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+          background:transparent; border:none; color:var(--dim);
+          font-size:11px; font-weight:700; letter-spacing:.04em;
+          padding:7px 4px; cursor:pointer; border-radius:10px;
+        }
+        #mobileTabs .mtab .ic{ width:22px; height:22px; }
+        #mobileTabs .mtab.active{ color:var(--gold); }
+      }
     </style>
   </head>
   <body>
@@ -2864,6 +2951,81 @@
     if (!window.PDFLib || !window.pdfjsLib) {
       toast("The PDF engine failed to load. Check your connection and reload the page.", true);
     }
-    </script>
+    
+    /* ---------- Mobile FAB + bottom tabs (harmless on desktop) ---------- */
+    (function initMobilePdf(){
+      var fab = $("#fabAnnotate");
+      var fabMenu = $("#fabMenu");
+      function closeFab(){
+        if (fabMenu) fabMenu.classList.remove("open");
+        if (fab) fab.classList.remove("open");
+      }
+      if (fab && fabMenu){
+        fab.addEventListener("click", function(e){
+          e.stopPropagation();
+          fabMenu.classList.toggle("open");
+          fab.classList.toggle("open");
+        });
+        document.addEventListener("click", function(e){
+          if (!fabMenu.contains(e.target) && e.target !== fab && !fab.contains(e.target)) closeFab();
+        });
+        // FAB tool items trigger the matching desktop toolbar handler
+        $$("#fabMenu [data-fab-tool]").forEach(function(b){
+          b.addEventListener("click", function(){
+            var tool = b.getAttribute("data-fab-tool");
+            var desktop = document.querySelector('#toolGroup [data-tool="' + tool + '"]');
+            if (desktop) desktop.click();
+            $$("#fabMenu .fab-item").forEach(function(x){ x.classList.toggle("on", x === b); });
+            closeFab();
+          });
+        });
+        // Signature opens the same studio as the desktop button
+        var fabSig = $("#fabSig");
+        if (fabSig) fabSig.addEventListener("click", function(){
+          var btn = $("#btnNewSig");
+          if (btn) btn.click();
+          closeFab();
+        });
+      }
+      // Bottom tabs: Annotate | Fill & Sign | Pages
+      var tabs = $$("#mobileTabs .mtab");
+      if (tabs.length){
+        tabs.forEach(function(t){
+          t.addEventListener("click", function(){
+            tabs.forEach(function(x){ x.classList.toggle("active", x === t); });
+            var which = t.getAttribute("data-mtab");
+            var pp = $("#pagesPanel"), sp = $("#sidePanel");
+            if (pp) pp.classList.remove("open");
+            if (sp) sp.classList.remove("open");
+            if (which === "pages" && pp) pp.classList.add("open");
+            if (which === "fill" && sp) sp.classList.add("open");
+            // FAB only makes sense on the Annotate canvas
+            if (fab) fab.style.display = (which === "annotate") ? "" : "none";
+            closeFab();
+          });
+        });
+      }
+    })();
+</script>
+  
+    <!-- Mobile-only: FAB, tool menu, bottom tab bar -->
+    <button id="fabAnnotate" aria-label="Annotation tools" type="button">+</button>
+    <div id="fabMenu" role="menu" aria-label="Annotation tools">
+      <button class="fab-item" data-fab-tool="select" type="button"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 7-6.5 1.5L9 18z"/></svg><span>Select</span></button>
+      <button class="fab-item" data-fab-tool="text" type="button"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></svg><span>Text</span></button>
+      <button class="fab-item" data-fab-tool="highlight" type="button"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l8.5-8.5a2.1 2.1 0 0 1 3 3L12 14H9z"/><path d="M4 20h16"/></svg><span>Highlight</span></button>
+      <button class="fab-item" data-fab-tool="underline" type="button"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4v6a6 6 0 0 0 12 0V4M4 20h16"/></svg><span>Underline</span></button>
+      <button class="fab-item" data-fab-tool="rect" type="button"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="1"/></svg><span>Rectangle</span></button>
+      <button class="fab-item" data-fab-tool="ellipse" type="button"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="9" ry="6"/></svg><span>Ellipse</span></button>
+      <button class="fab-item" data-fab-tool="line" type="button"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19L19 5"/></svg><span>Line</span></button>
+      <button class="fab-item" data-fab-tool="touchup" type="button"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V5h11v2M9.5 5v14M7.5 19h4"/><path d="M15.5 15.5l4.8-4.8a1.8 1.8 0 0 1 2.5 2.5l-4.8 4.8-3 .5z"/></svg><span>Touch-up</span></button>
+      <button class="fab-item" data-fab-tool="redact" type="button"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="8" rx="1" fill="currentColor" stroke="none"/><path d="M3 4h18M3 20h18" stroke-dasharray="3 3"/></svg><span>Redact</span></button>
+      <button class="fab-item" id="fabSig" type="button"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16c2-5 4-8 5-8s1.5 3 3 3 3-4 4-4M4 20h16"/></svg><span>Signature</span></button>
+    </div>
+    <nav id="mobileTabs" aria-label="PDF views">
+      <button class="mtab active" data-mtab="annotate" type="button"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span>Annotate</span></button>
+      <button class="mtab" data-mtab="fill" type="button"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></svg><span>Fill &amp; Sign</span></button>
+      <button class="mtab" data-mtab="pages" type="button"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8z"/><path d="M3 8v11a2 2 0 0 0 2 2h11"/></svg><span>Pages</span></button>
+    </nav>
   </body>
 </html>
