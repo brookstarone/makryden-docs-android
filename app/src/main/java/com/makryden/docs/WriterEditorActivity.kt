@@ -1,18 +1,31 @@
 package com.makryden.docs
 
+import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Typeface
+import android.graphics.drawable.BitmapDrawable
+import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.text.Editable
 import android.text.Layout
 import android.text.Spannable
+import android.text.SpannableStringBuilder
 import android.text.TextPaint
 import android.text.TextWatcher
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.AlignmentSpan
+import android.text.style.BackgroundColorSpan
 import android.text.style.BulletSpan
 import android.text.style.ForegroundColorSpan
+import android.text.style.ImageSpan
+import android.text.style.LeadingMarginSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
@@ -23,7 +36,9 @@ import android.view.MenuItem
 import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.res.ResourcesCompat
@@ -42,9 +57,18 @@ class WriterEditorActivity : AppCompatActivity() {
     private lateinit var titleEdit: EditText
     private lateinit var contentEdit: EditText
     private lateinit var toolbar: Toolbar
+    private lateinit var wordCountView: TextView
     private var docId: String = ""
     private var isNew: Boolean = false
     private var dirty = false
+
+    private val imagePicker = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.data?.let { uri -> insertImageFromUri(uri) }
+        }
+    }
 
     // Bundled fonts (assets/writer/fonts/)
     private val fonts = listOf(
@@ -80,13 +104,18 @@ class WriterEditorActivity : AppCompatActivity() {
 
         titleEdit = findViewById(R.id.doc_title)
         contentEdit = findViewById(R.id.doc_content)
+        wordCountView = findViewById(R.id.word_count)
         titleEdit.setText(initialTitle)
 
         setupFormatBar()
+        updateWordCount()
 
         val dirtyWatcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) { dirty = true }
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {
+                dirty = true
+                updateWordCount()
+            }
             override fun afterTextChanged(s: Editable?) {}
         }
         titleEdit.addTextChangedListener(dirtyWatcher)
@@ -110,9 +139,13 @@ class WriterEditorActivity : AppCompatActivity() {
             "H3" to { applyHeading(22) },
             "Tx" to { applyHeading(0) }, // normal text
             "\u2022 List" to { toggleBullet() },
-            "Center" to { applyAlignment(Layout.Alignment.ALIGN_CENTER) },
+            "1. List" to { toggleNumberedList() },
             "Left" to { applyAlignment(Layout.Alignment.ALIGN_NORMAL) },
+            "Center" to { applyAlignment(Layout.Alignment.ALIGN_CENTER) },
+            "Right" to { applyAlignment(Layout.Alignment.ALIGN_OPPOSITE) },
             "Color" to { showColorPicker() },
+            "HiLite" to { showHighlightPicker() },
+            "Image" to { pickImage() },
             "Clear" to { clearFormatting() }
         )
         for ((label, action) in buttons) {
@@ -233,15 +266,185 @@ class WriterEditorActivity : AppCompatActivity() {
         dirty = true
     }
 
-    private fun showFontPicker() {
-        val names = fonts.map { it.first }.toTypedArray()
+    /** Toggle numbered list on the current line(s). */
+    private fun toggleNumberedList() {
+        val spannable = contentEdit.text as Spannable
+        val text = spannable.toString()
+        val (selStart, selEnd) = selection()
+        // Find all line boundaries in the selection
+        var pos = selStart
+        while (pos > 0 && text[pos - 1] != '\n') pos--
+        val lineStarts = mutableListOf<Int>()
+        while (pos <= selEnd && pos < text.length) {
+            lineStarts.add(pos)
+            val nl = text.indexOf('\n', pos)
+            if (nl == -1 || nl >= selEnd) break
+            pos = nl + 1
+        }
+        if (lineStarts.isEmpty()) lineStarts.add(selStart)
+
+        // Check if first line already has a number span
+        val firstLineEnd = text.indexOf('\n', lineStarts[0]).let { if (it == -1) text.length else it }
+        val existing = spannable.getSpans(lineStarts[0], firstLineEnd, NumberSpan::class.java)
+        if (existing.isNotEmpty()) {
+            // Remove all number spans in range
+            val lastEnd = text.indexOf('\n', lineStarts.last()).let { if (it == -1) text.length else it }
+            for (span in spannable.getSpans(lineStarts[0], lastEnd, NumberSpan::class.java)) {
+                spannable.removeSpan(span)
+            }
+        } else {
+            var num = 1
+            for (ls in lineStarts) {
+                val le = text.indexOf('\n', ls).let { if (it == -1) text.length else it }
+                val margin = TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP, 48f, resources.displayMetrics
+                ).toInt()
+                spannable.setSpan(
+                    NumberSpan(num++, margin),
+                    ls, le, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+        }
+        dirty = true
+    }
+
+    /** Open gallery to pick an image for inline insertion. */
+    private fun pickImage() {
+        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+        intent.type = "image/*"
+        imagePicker.launch(intent)
+    }
+
+    private fun insertImageFromUri(uri: Uri) {
+        try {
+            val inputStream = contentResolver.openInputStream(uri) ?: return
+            var bitmap = BitmapFactory.decodeStream(inputStream)
+            inputStream.close()
+            if (bitmap == null) {
+                Toast.makeText(this, "Could not load image", Toast.LENGTH_SHORT).show()
+                return
+            }
+            // Scale down to max 800px wide to keep things manageable
+            val maxWidth = 800
+            if (bitmap.width > maxWidth) {
+                val ratio = maxWidth.toFloat() / bitmap.width
+                val newHeight = (bitmap.height * ratio).toInt()
+                bitmap = Bitmap.createScaledBitmap(bitmap, maxWidth, newHeight, true)
+            }
+            val drawable = BitmapDrawable(resources, bitmap)
+            drawable.setBounds(0, 0, drawable.intrinsicWidth, drawable.intrinsicHeight)
+
+            val spannable = contentEdit.text as Spannable
+            val pos = contentEdit.selectionStart.coerceAtLeast(0)
+            val placeholder = SpannableStringBuilder("\uFFFC\n")
+            placeholder.setSpan(
+                ImageSpan(drawable, ImageSpan.ALIGN_BASELINE),
+                0, 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+            spannable.insert(pos, placeholder)
+            dirty = true
+            Toast.makeText(this, "Image inserted", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Could not insert image", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Update the word count display. */
+    private fun updateWordCount() {
+        val text = contentEdit.text.toString().trim()
+        val words = if (text.isEmpty()) 0 else text.split("\\s+".toRegex()).size
+        val chars = contentEdit.text.length
+        wordCountView.text = "$words words \u00B7 $chars characters"
+    }
+
+    /** Highlight color picker (background color). */
+    private fun showHighlightPicker() {
+        val colors = intArrayOf(
+            Color.TRANSPARENT,
+            Color.parseColor("#FFF59D"), // light yellow
+            Color.parseColor("#A5D6A7"), // light green
+            Color.parseColor("#90CAF9"), // light blue
+            Color.parseColor("#CE93D8"), // light purple
+            Color.parseColor("#FFAB91"), // light orange
+            Color.parseColor("#E8C266")  // gold
+        )
+        val names = arrayOf("None", "Yellow", "Green", "Blue", "Purple", "Orange", "Gold")
         AlertDialog.Builder(this)
-            .setTitle("Font")
+            .setTitle("Highlight color")
             .setItems(names) { _, which ->
-                applyFont(fonts[which].second)
+                val (start, end) = selection()
+                if (start == end) {
+                    Toast.makeText(this, "Select text first", Toast.LENGTH_SHORT).show()
+                    return@setItems
+                }
+                val spannable = contentEdit.text as Spannable
+                for (span in spannable.getSpans(start, end, BackgroundColorSpan::class.java)) {
+                    spannable.removeSpan(span)
+                }
+                if (colors[which] != Color.TRANSPARENT) {
+                    spannable.setSpan(
+                        BackgroundColorSpan(colors[which]),
+                        start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                }
+                dirty = true
             }
             .show()
     }
+
+    /** Export document as HTML via share sheet. */
+    private fun exportHtml() {
+        val title = titleEdit.text.toString().ifEmpty { "document" }
+        val html = HtmlConverter.toHtml(contentEdit.text as Spannable)
+        val fullHtml = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>" +
+            title.replace("<", "&lt;").replace(">", "&gt;") +
+            "</title></head><body>" + html + "</body></html>"
+        val intent = Intent(Intent.ACTION_SEND)
+        intent.type = "text/html"
+        intent.putExtra(Intent.EXTRA_SUBJECT, "$title.html")
+        intent.putExtra(Intent.EXTRA_TEXT, fullHtml)
+        startActivity(Intent.createChooser(intent, "Export HTML via"))
+    }
+
+    private fun showFontPicker() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_font_picker, null)
+        val recycler = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.font_list)
+        recycler.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        recycler.adapter = object : androidx.recyclerview.widget.RecyclerView.Adapter<FontViewHolder>() {
+            override fun onCreateViewHolder(parent: android.view.ViewGroup, viewType: Int): FontViewHolder {
+                val tv = TextView(this@WriterEditorActivity)
+                tv.setPadding(32, 24, 32, 24)
+                tv.textSize = 18f
+                tv.setTextColor(Color.WHITE)
+                return FontViewHolder(tv)
+            }
+            override fun getItemCount() = fonts.size
+            override fun onBindViewHolder(holder: FontViewHolder, position: Int) {
+                val (name, path) = fonts[position]
+                holder.textView.text = name
+                try {
+                    holder.textView.typeface = typefaceCache.getOrPut(path) {
+                        Typeface.createFromAsset(assets, path)
+                    }
+                } catch (e: Exception) {
+                    // keep default
+                }
+                holder.textView.setOnClickListener {
+                    applyFont(path)
+                    dialog.dismiss()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private class FontViewHolder(val textView: TextView) :
+        androidx.recyclerview.widget.RecyclerView.ViewHolder(textView)
 
     private fun applyFont(assetPath: String) {
         val (start, end) = selection()
@@ -308,8 +511,10 @@ class WriterEditorActivity : AppCompatActivity() {
             UnderlineSpan::class.java,
             StrikethroughSpan::class.java,
             ForegroundColorSpan::class.java,
+            BackgroundColorSpan::class.java,
             AbsoluteSizeSpan::class.java,
             BulletSpan::class.java,
+            NumberSpan::class.java,
             CustomTypefaceSpan::class.java
         )
         for (clazz in spanTypes) {
@@ -400,6 +605,10 @@ class WriterEditorActivity : AppCompatActivity() {
                 shareDocument()
                 true
             }
+            R.id.action_export_html -> {
+                exportHtml()
+                true
+            }
             else -> super.onOptionsItemSelected(item)
         }
     }
@@ -428,6 +637,29 @@ class WriterEditorActivity : AppCompatActivity() {
         }
         override fun updateMeasureState(paint: TextPaint) {
             paint.typeface = typeface
+        }
+    }
+
+    /**
+     * Numbered-list span. Draws "N." in the leading margin.
+     * Pure ASCII implementation.
+     */
+    class NumberSpan(private val number: Int, private val marginWidth: Int) : LeadingMarginSpan {
+        override fun getLeadingMargin(first: Boolean): Int = marginWidth
+
+        override fun drawLeadingMargin(
+            c: Canvas, p: Paint, x: Int, dir: Int,
+            top: Int, baseline: Int, bottom: Int,
+            text: CharSequence, start: Int, end: Int,
+            first: Boolean, layout: Layout?
+        ) {
+            if (!first) return
+            val oldColor = p.color
+            p.color = oldColor // keep text color
+            val numberText = "$number."
+            val width = p.measureText(numberText)
+            c.drawText(numberText, (x + marginWidth - width - 16).toFloat(), baseline.toFloat(), p)
+            p.color = oldColor
         }
     }
 }
