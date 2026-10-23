@@ -155,7 +155,7 @@ class NoteEditorActivity : AppCompatActivity() {
 
     private fun toggleChecklist() {
         // Checklist = strikethrough toggle on the line (checked = done)
-        val spannable = contentEdit.text as Spannable
+        val spannable = contentEdit.text as android.text.Editable
         val text = spannable.toString()
         val pos = contentEdit.selectionStart.coerceAtLeast(0)
         var lineStart = pos
@@ -212,7 +212,7 @@ class NoteEditorActivity : AppCompatActivity() {
     }
 
     private fun toggleNumberedList() {
-        val spannable = contentEdit.text as Spannable
+        val spannable = contentEdit.text as android.text.Editable
         val text = spannable.toString()
         val pos = contentEdit.selectionStart.coerceAtLeast(0)
         var lineStart = pos

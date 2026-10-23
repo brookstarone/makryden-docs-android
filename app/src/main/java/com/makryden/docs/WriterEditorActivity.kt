@@ -334,7 +334,7 @@ class WriterEditorActivity : AppCompatActivity() {
             val drawable = BitmapDrawable(resources, bitmap)
             drawable.setBounds(0, 0, drawable.intrinsicWidth, drawable.intrinsicHeight)
 
-            val spannable = contentEdit.text as Spannable
+            val spannable = contentEdit.text as android.text.Editable
             val pos = contentEdit.selectionStart.coerceAtLeast(0)
             val placeholder = SpannableStringBuilder("\uFFFC\n")
             placeholder.setSpan(
