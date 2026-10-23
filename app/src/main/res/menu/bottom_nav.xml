@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_documents"
+        android:title="Documents"
+        android:icon="@drawable/ic_doc" />
+    <item
+        android:id="@+id/nav_notes"
+        android:title="Notes"
+        android:icon="@drawable/ic_note" />
+    <item
+        android:id="@+id/nav_pdfs"
+        android:title="PDFs"
+        android:icon="@drawable/ic_pdf" />
+</menu>
