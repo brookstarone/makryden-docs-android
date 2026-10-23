@@ -14,14 +14,14 @@
     <svg class="search-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zM9.5 14A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
     <input id="search" class="search" type="search" placeholder="Search documents&#8230;" autocomplete="off" aria-label="Search documents">
   </div>
-  <a id="acct-pill" class="acct-pill" href="https://makrydensystems.com/account/" aria-label="Account">?</a>
+  <button id="acct-pill" class="acct-pill" type="button" aria-label="Account">?</button>
 </div></header>
 
 <main class="wrap">
   <section id="auth-cta" class="auth-cta" hidden>
     <h2>Your documents, everywhere you are.</h2>
     <p>Sign in to create notes and documents and pick up where you left off.</p>
-    <a class="btn btn-gold" href="https://makrydensystems.com/account/login/">Sign in</a>
+    <button class="btn btn-gold" id="cta-signin" type="button">Sign in</button>
   </section>
 
   <section class="newbar" aria-label="Create new">
@@ -50,7 +50,7 @@
     <div id="recent-signin" class="empty" hidden>
       <h3>Sign in to see recents</h3>
       <p>Your notes and documents live in your Makryden account.</p>
-      <a class="btn btn-gold" href="https://makrydensystems.com/account/login/">Sign in</a>
+      <button class="btn btn-gold" id="recent-signin-btn" type="button">Sign in</button>
     </div>
   </section>
 
@@ -78,11 +78,51 @@
     </div>
   </section>
 
+
   <footer class="foot">
     <p><strong>Free forever.</strong> Your files never leave this device unless you send them.</p>
-    <p><a href="https://makrydensystems.com">makrydensystems.com</a></p>
+    <p><a href="https://makrydensystems.com">makrydensystems.com</a> &#183; <a href="https://makrydensystems.com/account/">Manage account</a></p>
   </footer>
 </main>
+
+
+<!-- AUTH MODAL -->
+<div id="auth-modal" class="modal" hidden>
+  <div class="modal-backdrop" data-close="auth-modal"></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <button class="modal-x" data-close="auth-modal" type="button" aria-label="Close">&#215;</button>
+    <h2 id="auth-title">Sign in</h2>
+    <p class="modal-sub">One Makryden account for Notes, Writer, and PDF.</p>
+    <div class="auth-tabs">
+      <button id="tab-login" class="on" type="button">Log in</button>
+      <button id="tab-signup" type="button">Create account</button>
+    </div>
+    <form id="auth-form">
+      <div class="field"><label for="auth-email">Email</label>
+        <input class="input" id="auth-email" type="email" autocomplete="email" required placeholder="you@example.com"></div>
+      <div class="field"><label for="auth-pass">Password</label>
+        <input class="input" id="auth-pass" type="password" autocomplete="current-password" required placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" minlength="6"></div>
+      <button class="btn btn-gold btn-block" id="auth-submit" type="submit">Log in</button>
+      <p class="hint" id="auth-note" hidden></p>
+    </form>
+    <div class="auth-links">
+      <button type="button" id="link-forgot">Forgot password?</button>
+      <button type="button" id="link-resend">Didn&#8217;t get the confirmation email? Resend it</button>
+    </div>
+  </div>
+</div>
+
+<!-- ACCOUNT MENU -->
+<div id="acct-modal" class="modal" hidden>
+  <div class="modal-backdrop" data-close="acct-modal"></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="acct-title">
+    <button class="modal-x" data-close="acct-modal" type="button" aria-label="Close">&#215;</button>
+    <h2 id="acct-title">Account</h2>
+    <p class="modal-sub" id="acct-email"></p>
+    <a class="btn btn-block" id="acct-manage" href="https://makrydensystems.com/account/">Manage account &#8594;</a>
+    <button class="btn btn-block btn-danger" id="acct-signout" type="button">Sign out</button>
+  </div>
+</div>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="file:///android_asset/docs/supabase.min.js"></script>
