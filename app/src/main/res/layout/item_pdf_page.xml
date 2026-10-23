@@ -4,14 +4,13 @@
     android:layout_height="match_parent"
     android:background="@color/sb_night">
 
-    <ImageView
+    <com.makryden.docs.ZoomableImageView
         android:id="@+id/page_image"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:scaleType="fitCenter"
-        android:adjustViewBounds="true" />
+        android:scaleType="matrix" />
 
-    <com.makryden.docs.PdfViewerActivity.AnnotationOverlay
+    <com.makryden.docs.PdfAnnotationView
         android:id="@+id/annotation_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
