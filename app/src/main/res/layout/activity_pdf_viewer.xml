@@ -41,7 +41,47 @@
         android:textColor="@color/sb_dim"
         android:textSize="13sp"
         android:gravity="center"
-        android:padding="8dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="2dp"
         android:text="1 / 1" />
+
+    <!-- Annotation tools -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/sb_deep"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/annot_bar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp" />
+
+    </HorizontalScrollView>
+
+    <!-- Color picker -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/sb_deep"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/color_row"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="8dp" />
+
+    </HorizontalScrollView>
 
 </LinearLayout>
