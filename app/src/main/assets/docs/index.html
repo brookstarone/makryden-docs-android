@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Makryden Docs</title>
+<meta name="description" content="Notes, documents, and PDFs &mdash; free forever, private by design.">
+<link rel="stylesheet" href="file:///android_asset/docs/styles.css">
+</head>
+<body>
+<header class="topbar"><div class="topbar-inner">
+  <a class="wordmark" href="file:///android_asset/docs/">Makryden <span>Docs</span></a>
+  <div class="searchwrap">
+    <svg class="search-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zM9.5 14A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
+    <input id="search" class="search" type="search" placeholder="Search documents&#8230;" autocomplete="off" aria-label="Search documents">
+  </div>
+  <a id="acct-pill" class="acct-pill" href="https://makrydensystems.com/account/" aria-label="Account">?</a>
+</div></header>
+
+<main class="wrap">
+  <section id="auth-cta" class="auth-cta" hidden>
+    <h2>Your documents, everywhere you are.</h2>
+    <p>Sign in to create notes and documents and pick up where you left off.</p>
+    <a class="btn btn-gold" href="https://makrydensystems.com/account/login/">Sign in</a>
+  </section>
+
+  <section class="newbar" aria-label="Create new">
+    <button class="newbtn" id="new-note" type="button">
+      <span class="newbtn-ic">&#43;</span>
+      <span class="newbtn-tx"><strong>Note</strong><small>Quick capture</small></span>
+    </button>
+    <button class="newbtn" id="new-doc" type="button">
+      <span class="newbtn-ic">&#43;</span>
+      <span class="newbtn-tx"><strong>Document</strong><small>Letters, resumes&#8230;</small></span>
+    </button>
+    <button class="newbtn" id="open-pdf" type="button">
+      <span class="newbtn-ic">&#43;</span>
+      <span class="newbtn-tx"><strong>Open PDF</strong><small>Fill, sign, annotate</small></span>
+    </button>
+  </section>
+
+  <section class="recent" aria-label="Recent documents">
+    <div class="sec-head"><h2>Recent</h2></div>
+    <div id="recent-list" class="recent-list"></div>
+    <div id="recent-empty" class="empty" hidden>
+      <div class="empty-ic">&#10022;</div>
+      <h3>Nothing yet</h3>
+      <p>Create your first note or document above &#8212; it will show up here.</p>
+    </div>
+    <div id="recent-signin" class="empty" hidden>
+      <h3>Sign in to see recents</h3>
+      <p>Your notes and documents live in your Makryden account.</p>
+      <a class="btn btn-gold" href="https://makrydensystems.com/account/login/">Sign in</a>
+    </div>
+  </section>
+
+  <section class="tools" aria-label="Tools">
+    <div class="sec-head"><h2>Tools</h2></div>
+    <div class="tool-grid">
+      <a class="tool-card" href="file:///android_asset/notes/">
+        <div class="tool-ic">&#9998;</div>
+        <h3>Notes</h3>
+        <p>Quick notes, checklists, and ideas &#8212; the scratchpad.</p>
+        <span class="tool-open">Open &#8594;</span>
+      </a>
+      <a class="tool-card" href="file:///android_asset/writer/">
+        <div class="tool-ic">&#167;</div>
+        <h3>Writer</h3>
+        <p>Letters, resumes, and documents &#8212; the word processor.</p>
+        <span class="tool-open">Open &#8594;</span>
+      </a>
+      <a class="tool-card" href="file:///android_asset/pdf/">
+        <div class="tool-ic">&#9744;</div>
+        <h3>PDF</h3>
+        <p>Fill forms, annotate, and sign &#8212; free, unlimited.</p>
+        <span class="tool-open">Open &#8594;</span>
+      </a>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p><strong>Free forever.</strong> Your files never leave this device unless you send them.</p>
+    <p><a href="https://makrydensystems.com">makrydensystems.com</a></p>
+  </footer>
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="file:///android_asset/docs/supabase.min.js"></script>
+<script src="file:///android_asset/docs/app.js"></script>
+</body>
+</html>
