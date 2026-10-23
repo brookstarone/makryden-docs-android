@@ -113,8 +113,8 @@ function renderRecents(){
 /* ---------- create ---------- */
 async function ensureUser(){
   if(currentUser) return true;
-  toast('Sign in first');
-  setTimeout(function(){ location.href = 'https://makrydensystems.com/account/login/'; }, 800);
+  toast('Sign in to create');
+  openAuth();
   return false;
 }
 
@@ -170,6 +170,48 @@ async function boot(){
   $('new-doc').addEventListener('click', newDoc);
   $('open-pdf').addEventListener('click', function(){ location.href = pdfUrl('pdf/index.html'); });
 
+  wireAuthUI();
+  sb.auth.onAuthStateChange(function(evt, session){
+    if(evt === 'SIGNED_OUT'){ currentUser = null; location.reload(); }
+  });
+
+  await refreshAuthUI();
+}
+
+/* ---------- inline auth ---------- */
+var authMode = 'login';
+
+function openModal(id){ $(id).hidden = false; document.body.style.overflow = 'hidden'; }
+function closeModal(id){ $(id).hidden = true; document.body.style.overflow = ''; }
+function openAuth(){ setAuthMode('login'); openModal('auth-modal'); setTimeout(function(){ try{ $('auth-email').focus(); }catch(e){} }, 120); }
+
+function setAuthMode(m){
+  authMode = m;
+  $('tab-login').classList.toggle('on', m === 'login');
+  $('tab-signup').classList.toggle('on', m === 'signup');
+  $('auth-submit').textContent = m === 'login' ? 'Log in' : 'Create account';
+  var n = $('auth-note'); n.hidden = true; n.textContent = '';
+}
+
+/* Store the session in the portal format so Writer/Notes/PDF pick it up too. */
+function writePortalSession(session, email){
+  try{
+    localStorage.setItem('mk-portal-session', JSON.stringify({
+      access: session.access_token,
+      refresh: session.refresh_token,
+      exp: Date.now() + (session.expires_in * 1000),
+      email: email,
+      remember: true
+    }));
+  }catch(e){}
+}
+
+function clearPortalSession(){
+  try{ localStorage.removeItem('mk-portal-session'); }catch(e){}
+  try{ sessionStorage.removeItem('mk-portal-session'); }catch(e){}
+}
+
+async function refreshAuthUI(){
   try{
     var s = await sb.auth.getSession();
     if(s.data && s.data.session){
@@ -178,17 +220,112 @@ async function boot(){
       $('acct-pill').textContent = (em[0] || 'M').toUpperCase();
       $('auth-cta').hidden = true;
     } else {
+      currentUser = null;
       $('acct-pill').textContent = '?';
       $('auth-cta').hidden = false;
     }
   }catch(e){
+    currentUser = null;
+    $('acct-pill').textContent = '?';
     $('auth-cta').hidden = false;
   }
-  sb.auth.onAuthStateChange(function(evt, session){
-    if(evt === 'SIGNED_OUT'){ currentUser = null; location.reload(); }
+  await loadRecents();
+}
+
+function wireAuthUI(){
+  // modal open/close
+  var closers = document.querySelectorAll('[data-close]');
+  for(var i = 0; i < closers.length; i++){
+    (function(elm){
+      elm.addEventListener('click', function(){ closeModal(elm.getAttribute('data-close')); });
+    })(closers[i]);
+  }
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape'){ closeModal('auth-modal'); closeModal('acct-modal'); }
   });
 
-  await loadRecents();
+  // sign-in entry points
+  $('cta-signin').addEventListener('click', openAuth);
+  $('recent-signin-btn').addEventListener('click', openAuth);
+
+  // account pill: menu when signed in, auth when signed out
+  $('acct-pill').addEventListener('click', function(e){
+    e.preventDefault();
+    if(currentUser){
+      $('acct-email').textContent = currentUser.email || '';
+      openModal('acct-modal');
+    } else {
+      openAuth();
+    }
+  });
+
+  // tabs
+  $('tab-login').addEventListener('click', function(){ setAuthMode('login'); });
+  $('tab-signup').addEventListener('click', function(){ setAuthMode('signup'); });
+
+  // submit
+  $('auth-form').addEventListener('submit', onAuthSubmit);
+
+  // forgot / resend
+  $('link-forgot').addEventListener('click', async function(){
+    var email = $('auth-email').value.trim();
+    if(!email){ toast('Enter your email above first'); return; }
+    var redirect = (window.location.protocol === 'file:')
+      ? 'https://makrydensystems.com/docs/'
+      : location.href.split('?')[0].split('#')[0];
+    var r = await sb.auth.resetPasswordForEmail(email, {redirectTo: redirect});
+    if(r.error) toast(r.error.message); else toast('Password reset email sent \u2014 check your inbox');
+  });
+  $('link-resend').addEventListener('click', async function(){
+    var email = $('auth-email').value.trim();
+    if(!email){ toast('Enter your email above first'); return; }
+    var r = await sb.auth.resend({type: 'signup', email: email});
+    if(r.error) toast(r.error.message); else toast('Confirmation email resent');
+  });
+
+  // sign out
+  $('acct-signout').addEventListener('click', async function(){
+    clearPortalSession();
+    closeModal('acct-modal');
+    await sb.auth.signOut();
+    // onAuthStateChange SIGNED_OUT triggers reload
+  });
+}
+
+async function onAuthSubmit(e){
+  e.preventDefault();
+  var email = $('auth-email').value.trim(), pass = $('auth-pass').value;
+  var btn = $('auth-submit'); btn.disabled = true;
+  var note = $('auth-note');
+  try{
+    if(authMode === 'login'){
+      var r = await sb.auth.signInWithPassword({email: email, password: pass});
+      if(r.error) throw r.error;
+      if(!r.data.session){
+        note.hidden = false;
+        note.textContent = 'Check your email to confirm your account, then log in.';
+        return;
+      }
+      writePortalSession(r.data.session, r.data.user.email);
+      closeModal('auth-modal');
+      toast('Signed in');
+      await refreshAuthUI();
+    } else {
+      var s = await sb.auth.signUp({email: email, password: pass});
+      if(s.error) throw s.error;
+      if(s.data.session){
+        writePortalSession(s.data.session, s.data.user.email);
+        closeModal('auth-modal');
+        toast('Account created \u2014 welcome!');
+        await refreshAuthUI();
+      } else {
+        note.hidden = false;
+        note.textContent = 'Account created \u2014 check your email for the confirmation link, then log in.';
+        setAuthMode('login');
+      }
+    }
+  }catch(err){ toast(err.message || 'Sign in failed'); }
+  finally{ btn.disabled = false; }
 }
 
 document.addEventListener('DOMContentLoaded', boot);
