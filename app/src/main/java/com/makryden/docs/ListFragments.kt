@@ -119,14 +119,10 @@ abstract class BaseListFragment : Fragment() {
             null
         }
         if (token == null) {
-            // Not signed in - go to auth
+            // Not signed in - show empty. MainActivity owns the auth gate.
             progress.visibility = View.GONE
             swipeRefresh.isRefreshing = false
-            try {
-                startActivity(Intent(ctx, AuthActivity::class.java))
-            } catch (e: Exception) {
-                Log.w(TAG_LIST, "Could not launch auth", e)
-            }
+            showEmpty()
             return
         }
         progress.visibility = View.VISIBLE
