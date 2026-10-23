@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Makryden Writer &mdash; Write beautifully</title>
+<meta name="description" content="Makryden Writer: a calm, beautiful long-form editor. One Makryden account, private by default.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- AUTH -->
+<section id="view-auth" class="view">
+  <div class="auth-card">
+    <div class="brandmark"><div class="seal">W</div><h1>Writer</h1></div>
+    <p class="sub">One Makryden account. Your documents, private and synced.</p>
+    <div class="auth-tabs">
+      <button id="tab-login" class="on" type="button">Log in</button>
+      <button id="tab-signup" type="button">Sign up</button>
+    </div>
+    <form id="auth-form">
+      <div class="field"><label for="auth-email">Email</label>
+        <input class="input" id="auth-email" type="email" autocomplete="email" required placeholder="you@example.com"></div>
+      <div class="field"><label for="auth-pass">Password</label>
+        <input class="input" id="auth-pass" type="password" autocomplete="current-password" required placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" minlength="6"></div>
+      <button class="btn btn-gold btn-block" id="auth-submit" type="submit">Log in</button>
+      <p class="hint is-hidden" id="auth-note"></p>
+    </form>
+    <div class="auth-links">
+      <button type="button" id="link-forgot">Forgot password?</button>
+      <button type="button" id="link-resend">Didn't get the confirmation email? Resend it</button>
+    </div>
+  </div>
+</section>
+
+<!-- DOC LIST -->
+<section id="view-list" class="view">
+  <div class="topbar"><div class="topbar-inner">
+    <div class="brandmark"><div class="seal">W</div><h1>Writer</h1></div>
+    <div class="spacer"></div>
+    <button class="acct-chip" id="acct-btn" type="button" aria-label="Account">
+      <span class="avatar" id="acct-avatar">M</span><span id="acct-name">&middot;&middot;&middot;</span>
+    </button>
+  </div></div>
+  <div class="wrap">
+    <div class="list-head"><h2>Your documents</h2><p id="doc-count"></p></div>
+    <div class="list-actions">
+      <button class="btn btn-gold" id="btn-new" type="button">+ New document</button>
+    </div>
+    <div class="search-row"><input class="input" id="doc-search" type="search" placeholder="Search documents&hellip;"></div>
+    <div class="doc-list" id="doc-list"></div>
+  </div>
+</section>
+
+<!-- EDITOR -->
+<section id="view-editor" class="view">
+  <div class="topbar"><div class="topbar-inner">
+    <button class="btn btn-sm btn-ghost backbtn" id="btn-back" type="button">&larr; Docs</button>
+    <span id="save-state">Saved</span>
+    <button class="iconbtn" id="btn-docmenu" type="button" aria-label="Document menu">&#8943;</button>
+  </div></div>
+  <div class="editor-wrap">
+    <input class="doc-title" id="doc-title" maxlength="300" placeholder="Untitled document" autocomplete="off">
+    <div class="toolbar" id="toolbar" role="toolbar" aria-label="Formatting">
+      <button class="toolbtn" data-cmd="undo" type="button" title="Undo"><span class="lbl">&#8617;</span></button>
+      <button class="toolbtn" data-cmd="redo" type="button" title="Redo"><span class="lbl">&#8620;</span></button>
+      <span class="tool-sep"></span>
+      <select class="toolselect" id="tool-font" title="Font" aria-label="Font family">
+        <option value="">Font</option>
+        <optgroup label="Sans-serif">
+          <option value="Arial, sans-serif">Arial</option>
+          <option value="Helvetica, sans-serif">Helvetica</option>
+          <option value="Roboto, sans-serif">Roboto</option>
+          <option value="'Open Sans', sans-serif">Open Sans</option>
+          <option value="Lato, sans-serif">Lato</option>
+          <option value="Montserrat, sans-serif">Montserrat</option>
+          <option value="Poppins, sans-serif">Poppins</option>
+          <option value="Verdana, sans-serif">Verdana</option>
+          <option value="Tahoma, sans-serif">Tahoma</option>
+          <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+          <option value="Calibri, sans-serif">Calibri</option>
+        </optgroup>
+        <optgroup label="Serif">
+          <option value="Georgia, serif">Georgia</option>
+          <option value="'Times New Roman', serif">Times New Roman</option>
+          <option value="'Playfair Display', serif">Playfair Display</option>
+          <option value="Merriweather, serif">Merriweather</option>
+          <option value="Garamond, serif">Garamond</option>
+          <option value="Palatino, serif">Palatino</option>
+          <option value="'Book Antiqua', serif">Book Antiqua</option>
+        </optgroup>
+        <optgroup label="Monospace">
+          <option value="'Courier New', monospace">Courier New</option>
+          <option value="Consolas, monospace">Consolas</option>
+          <option value="Monaco, monospace">Monaco</option>
+        </optgroup>
+        <optgroup label="Display">
+          <option value="Impact, sans-serif">Impact</option>
+          <option value="'Arial Black', sans-serif">Arial Black</option>
+          <option value="Marcellus, serif">Marcellus</option>
+        </optgroup>
+      </select>
+      <select class="toolselect" id="tool-size" title="Font size" aria-label="Font size">
+        <option value="">Size</option>
+        <option value="1">8pt</option>
+        <option value="2">10pt</option>
+        <option value="3">12pt</option>
+        <option value="4">14pt</option>
+        <option value="5">18pt</option>
+        <option value="6">24pt</option>
+        <option value="7">36pt</option>
+      </select>
+      <select class="toolselect" id="tool-linespacing" title="Line spacing" aria-label="Line spacing">
+        <option value="">Spacing</option>
+        <option value="1.0">1.0</option>
+        <option value="1.15">1.15</option>
+        <option value="1.5">1.5</option>
+        <option value="2.0">2.0</option>
+        <option value="2.5">2.5</option>
+      </select>
+      <span class="tool-sep"></span>
+      <button class="toolbtn" data-cmd="bold" type="button" title="Bold"><b>B</b></button>
+      <button class="toolbtn" data-cmd="italic" type="button" title="Italic"><i>I</i></button>
+      <button class="toolbtn" data-cmd="underline" type="button" title="Underline"><u>U</u></button>
+      <button class="toolbtn" data-cmd="strikeThrough" type="button" title="Strikethrough"><s>S</s></button>
+      <button class="toolbtn" data-cmd="subscript" type="button" title="Subscript"><span class="lbl">X<sub>2</sub></span></button>
+      <button class="toolbtn" data-cmd="superscript" type="button" title="Superscript"><span class="lbl">X<sup>2</sup></span></button>
+      <span class="tool-sep"></span>
+      <label class="toolcolor" title="Text color">A<input type="color" id="tool-fgcolor" value="#ffffff" aria-label="Text color"></label>
+      <label class="toolcolor hl" title="Highlight color"><span class="lbl">&#128397;</span><input type="color" id="tool-bgcolor" value="#E8C266" aria-label="Highlight color"></label>
+      <span class="tool-sep"></span>
+      <button class="toolbtn" data-block="h1" type="button" title="Heading 1"><span class="lbl">H1</span></button>
+      <button class="toolbtn" data-block="h2" type="button" title="Heading 2"><span class="lbl">H2</span></button>
+      <button class="toolbtn" data-block="h3" type="button" title="Heading 3"><span class="lbl">H3</span></button>
+      <button class="toolbtn" data-block="p" type="button" title="Body text"><span class="lbl">&para;</span></button>
+      <span class="tool-sep"></span>
+      <button class="toolbtn" data-cmd="justifyLeft" type="button" title="Align left"><span class="lbl">&#9776;</span></button>
+      <button class="toolbtn" data-cmd="justifyCenter" type="button" title="Center"><span class="lbl">&#9776;</span></button>
+      <button class="toolbtn" data-cmd="justifyRight" type="button" title="Align right"><span class="lbl">&#9776;</span></button>
+      <button class="toolbtn" data-cmd="justifyFull" type="button" title="Justify"><span class="lbl">&#9831;</span></button>
+      <span class="tool-sep"></span>
+      <button class="toolbtn" data-cmd="indent" type="button" title="Increase indent"><span class="lbl">&rarr;&#9524;</span></button>
+      <button class="toolbtn" data-cmd="outdent" type="button" title="Decrease indent"><span class="lbl">&#9500;&larr;</span></button>
+      <span class="tool-sep"></span>
+      <button class="toolbtn" data-cmd="insertUnorderedList" type="button" title="Bullets"><span class="lbl">&bull;&equiv;</span></button>
+      <button class="toolbtn" data-cmd="insertOrderedList" type="button" title="Numbered list"><span class="lbl">1&equiv;</span></button>
+      <button class="toolbtn" data-cmd="formatBlock" data-arg="blockquote" type="button" title="Quote"><span class="lbl">&#10013;</span></button>
+      <span class="tool-sep"></span>
+      <button class="toolbtn" id="tool-link" type="button" title="Insert link"><span class="lbl">&#128279;</span></button>
+      <button class="toolbtn" id="tool-image" type="button" title="Insert image"><span class="lbl">&#128444;</span></button>
+      <button class="toolbtn" id="tool-imgalign-l" type="button" title="Image: align left (select an image first)"><span class="lbl">&#128444;&larr;</span></button>
+      <button class="toolbtn" id="tool-imgalign-c" type="button" title="Image: center (select an image first)"><span class="lbl">&#128444;&#8596;</span></button>
+      <button class="toolbtn" id="tool-imgalign-r" type="button" title="Image: align right (select an image first)"><span class="lbl">&#128444;&rarr;</span></button>
+      <button class="toolbtn" id="tool-table" type="button" title="Insert table"><span class="lbl">&#8862;</span></button>
+      <button class="toolbtn" id="tool-tablemenu" type="button" title="Table options (rows &amp; columns)"><span class="lbl">&#8862;&#8943;</span></button>
+      <button class="toolbtn" data-cmd="insertHorizontalRule" type="button" title="Horizontal line"><span class="lbl">&#8213;</span></button>
+      <button class="toolbtn" data-cmd="removeFormat" type="button" title="Clear formatting"><span class="lbl">Tx</span></button>
+      <span class="tool-sep"></span>
+      <button class="toolbtn" id="tool-find" type="button" title="Find &amp; replace (Ctrl+F)"><span class="lbl">&#128269;</span></button>
+    </div>
+    <div class="wordcount" id="wordcount" aria-live="polite">0 words</div>
+    <div id="editor" contenteditable="true" data-ph="Start writing&hellip;" spellcheck="true"></div>
+    <div class="doc-opts">
+      <div class="opt-row"><label for="opt-header">Header</label>
+        <input class="input" id="opt-header" maxlength="300" placeholder="Running header (optional)"></div>
+      <div class="opt-row"><label for="opt-footer">Footer</label>
+        <input class="input" id="opt-footer" maxlength="300" placeholder="Footer (optional)"></div>
+      <div class="opt-row"><label for="opt-pageno">Page numbers</label>
+        <span class="switch"><input type="checkbox" id="opt-pageno"><span class="sl"></span></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- SCRIM + SHEETS -->
+<div class="scrim" id="scrim"></div>
+
+<div class="sheet" id="sheet-templates" role="dialog" aria-label="Choose a template">
+  <h3>New document</h3><p class="desc">Start from a template &mdash; each one seeds sensible starter content.</p>
+  <div class="tpl-grid">
+    <button class="tpl" data-tpl="blank" type="button"><div class="t-ico">&#128196;</div><div class="t-name">Blank</div><div class="t-d">A clean page</div></button>
+    <button class="tpl" data-tpl="letter" type="button"><div class="t-ico">&#9993;&#65039;</div><div class="t-name">Letter</div><div class="t-d">Addressed &amp; signed</div></button>
+    <button class="tpl" data-tpl="resume" type="button"><div class="t-ico">&#128203;</div><div class="t-name">R&eacute;sum&eacute;</div><div class="t-d">Sections ready to fill</div></button>
+    <button class="tpl" data-tpl="invoice" type="button"><div class="t-ico">&#129534;</div><div class="t-name">Invoice</div><div class="t-d">Items &amp; totals table</div></button>
+    <button class="tpl" data-tpl="meeting" type="button"><div class="t-ico">&#128467;&#65039;</div><div class="t-name">Meeting notes</div><div class="t-d">Agenda &amp; actions</div></button>
+  </div>
+  <div class="row"><button class="btn btn-ghost" id="tpl-cancel" type="button">Cancel</button></div>
+</div>
+
+<div class="sheet" id="sheet-docmenu" role="dialog" aria-label="Document menu">
+  <h3 id="dm-title">Document</h3><p class="desc" id="dm-sub"></p>
+  <div class="menu-list">
+    <button type="button" id="dm-share">&#128279; Share link&hellip;</button>
+    <button type="button" id="dm-sysshare">&#128228; Share&hellip;</button>
+    <button type="button" id="dm-email">&#9993;&#65039; Email</button>
+    <button type="button" id="dm-export-pdf">&#128196; Export PDF</button>
+    <button type="button" id="dm-export-docx">&#128221; Export Word (.docx)</button>
+    <button type="button" id="dm-print">&#128424;&#65039; Print</button>
+    <button type="button" id="dm-duplicate">&#10697; Duplicate</button>
+    <button type="button" id="dm-delete" class="danger">&#128465; Delete document</button>
+  </div>
+  <div class="row"><button class="btn btn-ghost" id="dm-close" type="button">Close</button></div>
+</div>
+
+<div class="sheet" id="sheet-share" role="dialog" aria-label="Share link">
+  <h3>Share link</h3><p class="desc">Anyone with this unlisted link can read the document. No account needed.</p>
+  <div id="share-none">
+    <button class="btn btn-gold btn-block" id="share-create" type="button">Create share link</button>
+  </div>
+  <div id="share-exists" class="is-hidden">
+    <div class="share-link-box"><a id="share-url" href="#" target="_blank" rel="noopener"></a></div>
+    <div class="opt-row"><label for="share-copy-toggle">Allow copying</label>
+      <span class="switch"><input type="checkbox" id="share-copy-toggle"><span class="sl"></span></span></div>
+    <div class="row">
+      <button class="btn" id="share-copybtn" type="button">Copy link</button>
+      <button class="btn btn-danger" id="share-revoke" type="button">Revoke</button>
+    </div>
+  </div>
+  <div class="row"><button class="btn btn-ghost" id="share-close" type="button">Done</button></div>
+</div>
+
+<div class="sheet" id="sheet-acct" role="dialog" aria-label="Account">
+  <h3>Account</h3><p class="desc">Signed in with your Makryden account.</p>
+  <div class="acct-email" id="acct-email-full"></div>
+  <div class="menu-list">
+    <button type="button" id="acct-changepw">&#128273; Change password</button>
+    <button type="button" id="acct-signout">&#8617; Sign out</button>
+    <button type="button" id="acct-signout-all" class="danger">&#9211; Sign out everywhere</button>
+  </div>
+  <div class="row"><button class="btn btn-ghost" id="acct-close" type="button">Close</button></div>
+</div>
+
+<div class="sheet" id="sheet-confirm" role="dialog" aria-label="Confirm">
+  <h3 id="cf-title">Are you sure?</h3><p class="desc" id="cf-desc"></p>
+  <div class="row">
+    <button class="btn btn-ghost" id="cf-no" type="button">Cancel</button>
+    <button class="btn btn-danger" id="cf-yes" type="button">Delete</button>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-find" role="dialog" aria-label="Find and replace">
+  <h3>Find &amp; replace</h3><p class="desc" id="find-status">Type to search the document.</p>
+  <div class="field"><label for="find-query">Find</label>
+    <input class="input" id="find-query" autocomplete="off" placeholder="Search for&hellip;"></div>
+  <div class="field"><label for="find-replace">Replace with</label>
+    <input class="input" id="find-replace" autocomplete="off" placeholder="Replacement text"></div>
+  <div class="opt-row"><label for="find-case">Match case</label>
+    <span class="switch"><input type="checkbox" id="find-case"><span class="sl"></span></span></div>
+  <div class="row">
+    <button class="btn btn-ghost" id="find-prev" type="button">&uarr; Prev</button>
+    <button class="btn btn-ghost" id="find-next" type="button">Next &darr;</button>
+  </div>
+  <div class="row">
+    <button class="btn" id="find-replace-btn" type="button">Replace</button>
+    <button class="btn" id="find-replace-all" type="button">Replace all</button>
+  </div>
+  <div class="row"><button class="btn btn-ghost" id="find-close" type="button">Done</button></div>
+</div>
+
+<div class="sheet" id="sheet-table" role="dialog" aria-label="Table options">
+  <h3>Table</h3><p class="desc">Edit the table at your cursor.</p>
+  <div class="menu-list">
+    <button type="button" id="tbl-row-above">&#65291; Insert row above</button>
+    <button type="button" id="tbl-row-below">&#65291; Insert row below</button>
+    <button type="button" id="tbl-col-left">&#65291; Insert column left</button>
+    <button type="button" id="tbl-col-right">&#65291; Insert column right</button>
+    <button type="button" id="tbl-del-row" class="danger">&#65293; Delete row</button>
+    <button type="button" id="tbl-del-col" class="danger">&#65293; Delete column</button>
+    <button type="button" id="tbl-del-table" class="danger">&#128465; Delete table</button>
+  </div>
+  <div class="row"><button class="btn btn-ghost" id="tbl-close" type="button">Done</button></div>
+</div>
+
+<div id="toast" role="status"></div>
+
+<script src="supabase.min.js"></script>
+<script src="docx.umd.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
