@@ -92,3 +92,29 @@ button{font-family:var(--sans);cursor:pointer}
   .tool-card p{display:none}
   .tool-open{margin-left:auto;flex:none}
 }
+
+/* ---------- auth modal ---------- */
+.modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal[hidden]{display:none}
+.modal-backdrop{position:absolute;inset:0;background:rgba(8,5,16,.72)}
+.modal-card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:30px 26px;width:100%;max-width:400px;box-shadow:0 24px 64px rgba(0,0,0,.5);max-height:90vh;overflow-y:auto}
+.modal-card h2{font-family:var(--serif);font-size:24px;margin-bottom:4px}
+.modal-sub{color:var(--dim);font-size:14px;margin-bottom:20px;word-break:break-all}
+.modal-x{position:absolute;top:10px;right:10px;width:38px;height:38px;border:none;background:transparent;color:var(--dim);font-size:22px;border-radius:10px}
+.modal-x:active{background:var(--deep2)}
+.auth-tabs{display:flex;gap:8px;margin-bottom:20px}
+.auth-tabs button{flex:1;padding:11px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--dim);font-weight:600;font-size:15px}
+.auth-tabs button.on{background:var(--gold-soft);border-color:var(--gold);color:var(--gold)}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:13px;font-weight:600;color:var(--dim);margin-bottom:6px}
+.input{width:100%;background:var(--deep);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:13px 14px;font-size:16px;font-family:var(--sans)}
+.input:focus{outline:2px solid var(--gold);outline-offset:-1px;border-color:var(--gold)}
+.btn-block{width:100%;margin-top:4px}
+.hint{font-size:13px;color:var(--gold);margin-top:12px;text-align:center}
+.hint[hidden]{display:none}
+.auth-links{display:flex;flex-direction:column;gap:2px;margin-top:14px}
+.auth-links button{background:none;border:none;color:var(--dim);font-size:13px;padding:8px;font-family:var(--sans)}
+.auth-links button:active{color:var(--gold)}
+#acct-manage{margin-bottom:10px}
+.btn-danger{background:transparent;border-color:rgba(232,122,122,.5);color:var(--danger)}
+button.acct-pill{border:none;font-family:var(--sans)}
