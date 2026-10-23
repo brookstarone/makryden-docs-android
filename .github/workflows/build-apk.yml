@@ -23,8 +23,8 @@ jobs:
           BUILD_TOOLS=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -1)
           $ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner sign \
             --ks /tmp/makryden-docs.keystore \
-            --ks-pass:env MKDOCS_KEYSTORE_PASSWORD \
-            --key-pass:env MKDOCS_KEY_PASSWORD \
+            --ks-pass env:MKDOCS_KEYSTORE_PASSWORD \
+            --key-pass env:MKDOCS_KEY_PASSWORD \
             --ks-key-alias $MKDOCS_KEY_ALIAS \
             --out app/build/outputs/apk/release/app-release-signed.apk \
             app/build/outputs/apk/release/app-release-unsigned.apk
