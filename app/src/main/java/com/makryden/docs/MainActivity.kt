@@ -1,110 +1,110 @@
 package com.makryden.docs
 
-import android.app.DownloadManager
+import android.app.Activity
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
-import android.webkit.CookieManager
-import android.webkit.DownloadListener
-import android.webkit.URLUtil
-import android.webkit.ValueCallback
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.view.Menu
+import android.view.MenuItem
+import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
+import androidx.fragment.app.Fragment
+import com.google.android.material.bottomnavigation.BottomNavigationView
 
 /**
- * Makryden Docs - offline-first document suite.
- * The entire UI ships inside the APK (app/src/main/assets/) and loads from
- * file:///android_asset/. Only Supabase (sync/auth) and the account portal
- * touch the network.
+ * Makryden Docs - hybrid native app.
+ * Native shell: Toolbar + BottomNavigationView + native lists.
+ * Editing surfaces (writer/notes/pdf) live in EditorActivity as WebView canvas.
  */
 class MainActivity : AppCompatActivity() {
 
     companion object {
-        private const val ASSET_HOME = "file:///android_asset/docs/index.html"
-        private const val ASSET_DOCS = "file:///android_asset/docs/"
-        private const val ASSET_WRITER = "file:///android_asset/writer/"
-        private const val ASSET_NOTES = "file:///android_asset/notes/"
-        private const val ASSET_PDF = "file:///android_asset/pdf/"
-        private const val SITE = "https://makrydensystems.com"
-        private const val ACCOUNT = "https://makrydensystems.com/account/"
-        private const val EXIT_RESET_MS = 2000L
+        private const val AUTH_REQUEST = 1001
     }
 
-    private lateinit var webView: WebView
-    private var filePathCallback: ValueCallback<Array<Uri>>? = null
-    private var backPressedOnce = false
+    private lateinit var bottomNav: BottomNavigationView
+    private lateinit var toolbar: Toolbar
+    private var currentTab: Int = R.id.nav_documents
 
-    private val fileChooserLauncher =
+    private val authLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            val callback = filePathCallback
-            filePathCallback = null
-            callback?.onReceiveValue(
-                WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
-            )
+            if (result.resultCode == Activity.RESULT_OK) {
+                updateAccountUi()
+                refreshCurrentTab()
+            } else {
+                // User backed out of auth; if still not signed in, keep prompting gently
+                if (!SessionStore(this).isSignedIn()) {
+                    Toast.makeText(this, "Sign in to sync your documents", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
+
+    private val pdfPickerLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val uri = result.data?.data
+                if (uri != null) {
+                    val viewerIntent = Intent(this, PdfViewerActivity::class.java)
+                    viewerIntent.putExtra(PdfViewerActivity.EXTRA_TITLE, "PDF")
+                    viewerIntent.putExtra(PdfViewerActivity.EXTRA_URI, uri.toString())
+                    // Persist permission so the viewer can read it
+                    try {
+                        contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    } catch (e: Exception) { }
+                    startActivity(viewerIntent)
+                }
+            }
+        }
+
+    /** Open the system file picker for PDFs (called from PdfListFragment FAB). */
+    fun openPdfPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+        intent.type = "application/pdf"
+        intent.addCategory(Intent.CATEGORY_OPENABLE)
+        pdfPickerLauncher.launch(intent)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
 
-        webView = WebView(this)
-        setContentView(webView)
+        toolbar = findViewById(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        supportActionBar?.title = "Makryden Docs"
 
-        val settings = webView.settings
-        settings.javaScriptEnabled = true
-        settings.domStorageEnabled = true
-        settings.allowFileAccess = true
-        settings.mediaPlaybackRequiresUserGesture = false
-
-        // Accept third-party cookies so the Supabase session works from file:// origin
-        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
-
-        webView.webViewClient = DocsWebViewClient()
-        webView.webChromeClient = DocsWebChromeClient()
-
-        webView.setDownloadListener(DownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-            try {
-                val request = DownloadManager.Request(Uri.parse(url))
-                request.addRequestHeader("Cookie", CookieManager.getInstance().getCookie(url) ?: "")
-                request.addRequestHeader("User-Agent", userAgent)
-                request.setTitle(URLUtil.guessFileName(url, contentDisposition, mimeType))
-                request.setDescription("Makryden Docs download")
-                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimeType))
-                val dm = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
-                dm.enqueue(request)
-                Toast.makeText(this, "Downloading...", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(this, "Download failed", Toast.LENGTH_SHORT).show()
+        bottomNav = findViewById(R.id.bottom_nav)
+        bottomNav.setOnItemSelectedListener { item ->
+            currentTab = item.itemId
+            val fragment: Fragment = when (item.itemId) {
+                R.id.nav_notes -> NotesListFragment()
+                R.id.nav_pdfs -> PdfListFragment()
+                else -> DocumentListFragment()
             }
-        })
-
-        // Back button: WebView history first, double-press to exit at docs home
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                val current = webView.url ?: ""
-                if (webView.canGoBack() && !isDocsHome(current)) {
-                    webView.goBack()
-                } else if (backPressedOnce) {
-                    finish()
-                } else {
-                    backPressedOnce = true
-                    Toast.makeText(this@MainActivity, "Press back again to exit", Toast.LENGTH_SHORT).show()
-                    webView.postDelayed({ backPressedOnce = false }, EXIT_RESET_MS)
-                }
+            supportActionBar?.title = when (item.itemId) {
+                R.id.nav_notes -> "Notes"
+                R.id.nav_pdfs -> "PDFs"
+                else -> "Documents"
             }
-        })
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.fragment_container, fragment)
+                .commit()
+            true
+        }
 
-        if (savedInstanceState != null) {
-            webView.restoreState(savedInstanceState)
-        } else {
+        // Default tab
+        if (savedInstanceState == null) {
+            bottomNav.selectedItemId = R.id.nav_documents
             handleIntent(intent)
+        }
+
+        // Require sign-in for sync
+        if (!SessionStore(this).isSignedIn()) {
+            promptSignIn()
         }
     }
 
@@ -114,113 +114,91 @@ class MainActivity : AppCompatActivity() {
         handleIntent(intent)
     }
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        webView.saveState(outState)
-    }
-
-    private fun isDocsHome(url: String): Boolean {
-        return url == ASSET_HOME || url == ASSET_DOCS || url == "$ASSET_DOCS#index.html" ||
-            url.endsWith("/android_asset/docs/index.html")
-    }
-
+    /**
+     * Share-intent handling: PDFs shared from other apps open the native
+     * PDF viewer, shared text opens the native note editor.
+     */
     private fun handleIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND) {
             val type = intent.type ?: ""
             when {
                 type == "application/pdf" -> {
-                    webView.loadUrl(ASSET_PDF + "index.html")
-                    return
+                    val uri = intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)
+                    val viewerIntent = Intent(this, PdfViewerActivity::class.java)
+                    viewerIntent.putExtra(PdfViewerActivity.EXTRA_TITLE, "Shared PDF")
+                    if (uri != null) {
+                        viewerIntent.putExtra(PdfViewerActivity.EXTRA_URI, uri.toString())
+                    }
+                    startActivity(viewerIntent)
                 }
                 type.startsWith("text/") -> {
-                    webView.loadUrl(ASSET_NOTES + "index.html")
-                    return
+                    val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+                    // stash for the note editor to pick up
+                    getSharedPreferences("mk_share", MODE_PRIVATE).edit()
+                        .putString("shared_text", sharedText).apply()
+                    val noteIntent = Intent(this, NoteEditorActivity::class.java)
+                    noteIntent.putExtra(NoteEditorActivity.EXTRA_TITLE, "New note")
+                    startActivity(noteIntent)
                 }
-            }
-        }
-        // Default: docs home. If WebView already has a page, don't reload.
-        if (webView.url.isNullOrEmpty()) {
-            webView.loadUrl(ASSET_HOME)
-        }
-    }
-
-    private inner class DocsWebViewClient : WebViewClient() {
-        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-            val url = request.url.toString()
-            return when {
-                // Asset URLs stay in the WebView
-                url.startsWith("file:///android_asset/") -> false
-                // Account portal stays in the WebView (session bridge needs it)
-                url.startsWith(ACCOUNT) -> false
-                // Site doc paths rewrite to asset equivalents
-                url.startsWith("$SITE/docs/") -> {
-                    view.loadUrl(rewriteToAsset(url, "$SITE/docs/", ASSET_DOCS))
-                    true
-                }
-                url.startsWith("$SITE/writer/") -> {
-                    view.loadUrl(rewriteToAsset(url, "$SITE/writer/", ASSET_WRITER))
-                    true
-                }
-                url.startsWith("$SITE/notes/") -> {
-                    view.loadUrl(rewriteToAsset(url, "$SITE/notes/", ASSET_NOTES))
-                    true
-                }
-                url.startsWith("$SITE/pdf/") -> {
-                    view.loadUrl(rewriteToAsset(url, "$SITE/pdf/", ASSET_PDF))
-                    true
-                }
-                // mailto:, tel:, etc. go to system handlers
-                url.startsWith("mailto:") || url.startsWith("tel:") || url.startsWith("sms:") -> {
-                    try {
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                    } catch (e: Exception) {
-                        // No handler installed; ignore
-                    }
-                    true
-                }
-                // Everything else opens in the system browser
-                url.startsWith("http://") || url.startsWith("https://") -> {
-                    try {
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                    } catch (e: Exception) {
-                        // No browser; ignore
-                    }
-                    true
-                }
-                else -> false
-            }
-        }
-
-        private fun rewriteToAsset(url: String, sitePrefix: String, assetPrefix: String): String {
-            val rest = url.removePrefix(sitePrefix)
-            // rest may be "index.html", "?id=...", "index.html?id=...", or ""
-            return if (rest.isEmpty() || rest == "/") {
-                assetPrefix + "index.html"
-            } else if (rest.startsWith("?")) {
-                assetPrefix + "index.html" + rest
-            } else {
-                assetPrefix + rest
             }
         }
     }
 
-    private inner class DocsWebChromeClient : WebChromeClient() {
-        override fun onShowFileChooser(
-            view: WebView,
-            callback: ValueCallback<Array<Uri>>,
-            params: FileChooserParams
-        ): Boolean {
-            // Cancel any pending chooser
-            filePathCallback?.onReceiveValue(null)
-            filePathCallback = callback
-            try {
-                val intent = params.createIntent()
-                fileChooserLauncher.launch(intent)
-            } catch (e: Exception) {
-                filePathCallback = null
-                return false
+    private fun promptSignIn() {
+        val intent = Intent(this, AuthActivity::class.java)
+        authLauncher.launch(intent)
+    }
+
+    private fun refreshCurrentTab() {
+        val fragment = supportFragmentManager.findFragmentById(R.id.fragment_container)
+        if (fragment is BaseListFragment) {
+            fragment.refresh()
+        }
+    }
+
+    private fun updateAccountUi() {
+        // Rebuild the options menu to reflect sign-in state
+        invalidateOptionsMenu()
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.main_menu, menu)
+        return true
+    }
+
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        val session = SessionStore(this)
+        val signInItem = menu.findItem(R.id.action_sign_in)
+        val signOutItem = menu.findItem(R.id.action_sign_out)
+        val accountItem = menu.findItem(R.id.action_account)
+        if (session.isSignedIn()) {
+            signInItem?.isVisible = false
+            signOutItem?.isVisible = true
+            accountItem?.isVisible = true
+            accountItem?.title = session.getEmail() ?: "Account"
+        } else {
+            signInItem?.isVisible = true
+            signOutItem?.isVisible = false
+            accountItem?.isVisible = false
+        }
+        return super.onPrepareOptionsMenu(menu)
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_sign_in -> {
+                promptSignIn()
+                true
             }
-            return true
+            R.id.action_sign_out -> {
+                SessionStore(this).clear()
+                Toast.makeText(this, "Signed out", Toast.LENGTH_SHORT).show()
+                updateAccountUi()
+                refreshCurrentTab()
+                promptSignIn()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
         }
     }
 }
