@@ -8,4 +8,7 @@
         android:id="@+id/action_share"
         android:title="Share"
         android:icon="@drawable/ic_share" />
+    <item
+        android:id="@+id/action_export_html"
+        android:title="Export HTML" />
 </menu>
