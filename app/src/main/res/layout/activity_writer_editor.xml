@@ -76,4 +76,17 @@
 
     </ScrollView>
 
+    <TextView
+        android:id="@+id/word_count"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/sb_deep"
+        android:textColor="@color/sb_dim"
+        android:textSize="12sp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:text="0 words" />
+
 </LinearLayout>
