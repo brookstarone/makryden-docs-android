@@ -11,13 +11,25 @@ android {
         applicationId = "com.makryden.docs"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
     }
 
+    signingConfigs {
+        create("release") {
+            val ksPath = System.getenv("MKDOCS_KEYSTORE_PATH")
+            if (ksPath != null) {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("MKDOCS_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("MKDOCS_KEY_ALIAS")
+                keyPassword = System.getenv("MKDOCS_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
         }
         debug {
             // debuggable true is the default for debug
