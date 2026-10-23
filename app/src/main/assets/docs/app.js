@@ -42,27 +42,41 @@ function pdfRecents(){
   try{
     var list = JSON.parse(localStorage.getItem('mk-docs-recent-pdfs') || '[]');
     return list.map(function(p){
-      return { kind:'pdf', id:null, title:p.name, sub:fmtSize(p.size), at:p.openedAt, url:'file:///android_asset/pdf/index.html' };
+      return { kind:'pdf', id:null, title:p.name, sub:fmtSize(p.size), at:p.openedAt, url:pdfUrl('pdf/index.html') };
     });
   }catch(e){ return []; }
 }
 
 async function loadRecents(){
-  var docs = [], notes = [];
+  var docs = [], notes = [], pdfs = [];
   if(currentUser){
     var r = await sb.from('documents').select('id,title,updated_at').order('updated_at', {ascending:false}).limit(20);
     if(!r.error) docs = (r.data||[]).map(function(d){
-      return { kind:'doc', id:d.id, title:d.title || 'Untitled document', sub:'', at:d.updated_at, url:'file:///android_asset/writer/index.html?id=' + d.id };
+      return { kind:'doc', id:d.id, title:d.title || 'Untitled document', sub:'', at:d.updated_at, url:pdfUrl('writer/index.html?id=' + d.id) };
     });
     var n = await sb.from('notes').select('id,title,updated_at').order('updated_at', {ascending:false}).limit(20);
     if(!n.error) notes = (n.data||[]).map(function(x){
-      return { kind:'note', id:x.id, title:x.title || 'Untitled', sub:'', at:x.updated_at, url:'file:///android_asset/notes/index.html?id=' + x.id };
+      return { kind:'note', id:x.id, title:x.title || 'Untitled', sub:'', at:x.updated_at, url:pdfUrl('notes/index.html?id=' + x.id) };
+    });
+    var p = await sb.from('pdf_documents').select('id,filename,file_size,created_at').order('created_at', {ascending:false}).limit(20);
+    if(!p.error) pdfs = (p.data||[]).map(function(x){
+      return { kind:'pdf', id:x.id, title:x.filename || 'Untitled PDF', sub:fmtSize(x.file_size||0), at:x.created_at, url:pdfUrl('pdf/index.html?id=' + x.id) };
     });
   }
-  recents = docs.concat(notes).concat(pdfRecents())
+  recents = docs.concat(notes).concat(pdfs).concat(pdfRecents())
     .sort(function(a,b){ return new Date(b.at) - new Date(a.at); })
     .slice(0, 20);
   renderRecents();
+}
+
+/* URL helper: file:// for app, relative for website */
+function pdfUrl(path){
+  if(window.location.protocol === 'file:') return 'file:///android_asset/' + path;
+  var base = window.location.pathname;
+  /* /docs/index.html -> / ; /docs/ -> / */
+  var root = base.replace(/\/docs\/.*$/, '/');
+  /* path like 'writer/index.html?id=...' -> '/writer/index.html?id=...' */
+  return root + path;
 }
 
 var PILL = { note:['NOTE','pill-note'], doc:['DOCUMENT','pill-doc'], pdf:['PDF','pill-pdf'] };
@@ -110,7 +124,7 @@ async function newNote(){
   var row = { id:id, user_id:currentUser.id, title:'', doc:{type:'doc', content:[{type:'paragraph'}]}, text:'', tags:[], folder_id:null, pinned:false };
   var r = await sb.from('notes').insert(row);
   if(r.error){ toast('Could not create note'); return; }
-  location.href = 'file:///android_asset/notes/index.html?id=' + id;
+  location.href = pdfUrl('notes/index.html?id=' + id);
 }
 
 async function newDoc(){
@@ -119,7 +133,7 @@ async function newDoc(){
     user_id:currentUser.id, title:'Untitled document', content_html:'', template:'blank'
   }).select().single();
   if(r.error){ toast('Could not create document'); return; }
-  location.href = 'file:///android_asset/writer/index.html?id=' + r.data.id;
+  location.href = pdfUrl('writer/index.html?id=' + r.data.id);
 }
 
 /* Adopt the portal session (makrydensystems.com/account/) if we don't have our own.
@@ -154,7 +168,7 @@ async function boot(){
   $('search').addEventListener('input', function(e){ filter = e.target.value; renderRecents(); });
   $('new-note').addEventListener('click', newNote);
   $('new-doc').addEventListener('click', newDoc);
-  $('open-pdf').addEventListener('click', function(){ location.href = 'file:///android_asset/pdf/index.html'; });
+  $('open-pdf').addEventListener('click', function(){ location.href = pdfUrl('pdf/index.html'); });
 
   try{
     var s = await sb.auth.getSession();
