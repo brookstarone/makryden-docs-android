@@ -2,6 +2,7 @@ package com.makryden.docs
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -14,9 +15,15 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 
+private const val TAG_LIST = "DocsList"
+
 /**
  * Base fragment for native document/note/PDF lists.
  * Subclasses provide loadItems() and createNew().
+ *
+ * Hardened: every context/activity access is guarded so a detached
+ * fragment can never crash the app (no requireContext(), no bare
+ * activity?.runOnUiThread without an isAdded check).
  */
 abstract class BaseListFragment : Fragment() {
 
@@ -52,7 +59,8 @@ abstract class BaseListFragment : Fragment() {
         adapter = DocAdapter { item ->
             openEditor(item)
         }
-        recycler.layoutManager = LinearLayoutManager(requireContext())
+        // view.context is safe here: the view is attached during onViewCreated
+        recycler.layoutManager = LinearLayoutManager(view.context)
         recycler.adapter = adapter
 
         swipeRefresh.setOnRefreshListener { refresh() }
@@ -62,32 +70,63 @@ abstract class BaseListFragment : Fragment() {
     }
 
     private fun openEditor(item: SupabaseClient.DocItem) {
+        val ctx = context ?: run {
+            Log.w(TAG_LIST, "openEditor dropped: fragment detached")
+            return
+        }
         val intent = when (item.kind) {
-            "note" -> Intent(requireContext(), NoteEditorActivity::class.java).apply {
+            "note" -> Intent(ctx, NoteEditorActivity::class.java).apply {
                 putExtra(NoteEditorActivity.EXTRA_ID, item.id)
                 putExtra(NoteEditorActivity.EXTRA_TITLE, item.title)
             }
-            "pdf" -> Intent(requireContext(), PdfViewerActivity::class.java).apply {
+            "pdf" -> Intent(ctx, PdfViewerActivity::class.java).apply {
                 putExtra(PdfViewerActivity.EXTRA_ID, item.id)
                 putExtra(PdfViewerActivity.EXTRA_TITLE, item.title)
             }
-            else -> Intent(requireContext(), WriterEditorActivity::class.java).apply {
+            else -> Intent(ctx, WriterEditorActivity::class.java).apply {
                 putExtra(WriterEditorActivity.EXTRA_ID, item.id)
                 putExtra(WriterEditorActivity.EXTRA_TITLE, item.title)
             }
         }
-        startActivity(intent)
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.w(TAG_LIST, "openEditor failed", e)
+        }
     }
 
     fun refresh() {
-        val session = SessionStore(requireContext())
-        val token = session.getAccessToken()
+        // Guard: fragment may be attached but views not yet created (race condition)
+        if (!::progress.isInitialized || view == null) {
+            android.util.Log.w("BaseListFragment", "refresh dropped: views not initialized yet")
+            return
+        }
+        val ctx = context
+        if (ctx == null || !isAdded) {
+            Log.w(TAG_LIST, "refresh dropped: fragment not attached")
+            return
+        }
+        val session = try {
+            SessionStore(ctx)
+        } catch (e: Exception) {
+            Log.w(TAG_LIST, "SessionStore failed", e)
+            return
+        }
+        val token = try {
+            session.getAccessToken()
+        } catch (e: Exception) {
+            Log.w(TAG_LIST, "getAccessToken failed", e)
+            null
+        }
         if (token == null) {
             // Not signed in - go to auth
             progress.visibility = View.GONE
             swipeRefresh.isRefreshing = false
-            val intent = android.content.Intent(requireContext(), AuthActivity::class.java)
-            startActivity(intent)
+            try {
+                startActivity(Intent(ctx, AuthActivity::class.java))
+            } catch (e: Exception) {
+                Log.w(TAG_LIST, "Could not launch auth", e)
+            }
             return
         }
         progress.visibility = View.VISIBLE
@@ -95,25 +134,54 @@ abstract class BaseListFragment : Fragment() {
         Thread {
             try {
                 val items = loadItems(token)
-                activity?.runOnUiThread {
-                    progress.visibility = View.GONE
-                    swipeRefresh.isRefreshing = false
-                    adapter.submitList(items)
-                    emptyView.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+                val act = activity
+                if (act == null || !isAdded) {
+                    Log.w(TAG_LIST, "Fragment detached before list load finished; dropping result")
+                    return@Thread
+                }
+                act.runOnUiThread {
+                    if (!isAdded) return@runOnUiThread
+                    try {
+                        progress.visibility = View.GONE
+                        swipeRefresh.isRefreshing = false
+                        adapter.submitList(items)
+                        emptyView.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+                    } catch (e: Exception) {
+                        Log.w(TAG_LIST, "List UI update failed", e)
+                    }
                 }
             } catch (e: Exception) {
-                activity?.runOnUiThread {
+                val act = activity
+                if (act == null || !isAdded) {
+                    Log.w(TAG_LIST, "Fragment detached during list load error; dropping", e)
+                    return@Thread
+                }
+                act.runOnUiThread {
+                    if (!isAdded) return@runOnUiThread
                     progress.visibility = View.GONE
                     swipeRefresh.isRefreshing = false
                     val msg = e.message ?: ""
+                    val c = context
                     if (msg.contains("401") || msg.contains("unauthorized") || msg.contains("JWT")) {
                         // Session expired - clear and go to auth
-                        SessionStore(requireContext()).clear()
-                        val intent = android.content.Intent(requireContext(), AuthActivity::class.java)
-                        startActivity(intent)
+                        try {
+                            session.clear()
+                        } catch (_: Exception) {
+                        }
+                        if (c != null) {
+                            try {
+                                startActivity(Intent(c, AuthActivity::class.java))
+                            } catch (_: Exception) {
+                            }
+                        }
                     } else {
                         showEmpty()
-                        Toast.makeText(requireContext(), "Could not load: $msg", Toast.LENGTH_LONG).show()
+                        if (c != null) {
+                            try {
+                                Toast.makeText(c, "Could not load: $msg", Toast.LENGTH_LONG).show()
+                            } catch (_: Exception) {
+                            }
+                        }
                     }
                 }
             }
@@ -121,34 +189,86 @@ abstract class BaseListFragment : Fragment() {
     }
 
     private fun showEmpty() {
-        progress.visibility = View.GONE
-        swipeRefresh.isRefreshing = false
-        adapter.submitList(emptyList())
-        emptyView.visibility = View.VISIBLE
+        // Called only from the UI thread while attached
+        try {
+            progress.visibility = View.GONE
+            swipeRefresh.isRefreshing = false
+            adapter.submitList(emptyList())
+            emptyView.visibility = View.VISIBLE
+        } catch (e: Exception) {
+            Log.w(TAG_LIST, "showEmpty failed", e)
+        }
     }
 
     private fun createItem() {
-        val session = SessionStore(requireContext())
-        val token = session.getAccessToken()
-        val userId = session.getUserId()
-        if (token == null || userId == null) {
-            Toast.makeText(requireContext(), "Please sign in first", Toast.LENGTH_SHORT).show()
+        val ctx = context ?: run {
+            Log.w(TAG_LIST, "createItem dropped: fragment detached")
             return
         }
-        Toast.makeText(requireContext(), "Creating...", Toast.LENGTH_SHORT).show()
+        val session = try {
+            SessionStore(ctx)
+        } catch (e: Exception) {
+            Log.w(TAG_LIST, "SessionStore failed", e)
+            return
+        }
+        val token = try {
+            session.getAccessToken()
+        } catch (e: Exception) {
+            null
+        }
+        val userId = try {
+            session.getUserId()
+        } catch (e: Exception) {
+            null
+        }
+        if (token == null || userId == null) {
+            try {
+                Toast.makeText(ctx, "Please sign in first", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Log.w(TAG_LIST, "Toast failed", e)
+            }
+            return
+        }
+        try {
+            Toast.makeText(ctx, "Creating...", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.w(TAG_LIST, "Toast failed", e)
+        }
         Thread {
             try {
                 val item = createNew(token, userId)
-                activity?.runOnUiThread {
+                val act = activity
+                if (act == null || !isAdded) {
+                    Log.w(TAG_LIST, "Fragment detached before create finished; dropping result")
+                    return@Thread
+                }
+                act.runOnUiThread {
+                    if (!isAdded) return@runOnUiThread
+                    val c = context
                     if (item != null) {
                         openEditor(item)
-                    } else {
-                        Toast.makeText(requireContext(), "Could not create", Toast.LENGTH_SHORT).show()
+                    } else if (c != null) {
+                        try {
+                            Toast.makeText(c, "Could not create", Toast.LENGTH_SHORT).show()
+                        } catch (_: Exception) {
+                        }
                     }
                 }
             } catch (e: Exception) {
-                activity?.runOnUiThread {
-                    Toast.makeText(requireContext(), "Could not create: ${e.message}", Toast.LENGTH_SHORT).show()
+                val act = activity
+                if (act == null || !isAdded) {
+                    Log.w(TAG_LIST, "Fragment detached during create error; dropping", e)
+                    return@Thread
+                }
+                act.runOnUiThread {
+                    if (!isAdded) return@runOnUiThread
+                    val c = context
+                    if (c != null) {
+                        try {
+                            Toast.makeText(c, "Could not create: ${e.message}", Toast.LENGTH_SHORT).show()
+                        } catch (_: Exception) {
+                        }
+                    }
                 }
             }
         }.start()

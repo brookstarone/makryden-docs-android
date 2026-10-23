@@ -14,9 +14,9 @@ import androidx.fragment.app.Fragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
 
 /**
- * Makryden Docs - hybrid native app.
+ * Makryden Docs - fully native app.
  * Native shell: Toolbar + BottomNavigationView + native lists.
- * Editing surfaces (writer/notes/pdf) live in EditorActivity as WebView canvas.
+ * Native editors: WriterEditorActivity, NoteEditorActivity, PdfViewerActivity.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -90,21 +90,48 @@ class MainActivity : AppCompatActivity() {
                 R.id.nav_pdfs -> "PDFs"
                 else -> "Documents"
             }
-            supportFragmentManager.beginTransaction()
-                .replace(R.id.fragment_container, fragment)
-                .commit()
+            try {
+                supportFragmentManager.beginTransaction()
+                    .replace(R.id.fragment_container, fragment)
+                    .commit()
+            } catch (e: Exception) {
+                android.util.Log.w("MakrydenDocs", "Fragment transaction failed", e)
+            }
             true
         }
 
         // Default tab
         if (savedInstanceState == null) {
-            bottomNav.selectedItemId = R.id.nav_documents
-            handleIntent(intent)
+            try {
+                bottomNav.selectedItemId = R.id.nav_documents
+            } catch (e: Exception) {
+                android.util.Log.w("MakrydenDocs", "Default tab select failed", e)
+            }
+            try {
+                handleIntent(intent)
+            } catch (e: Exception) {
+                android.util.Log.w("MakrydenDocs", "handleIntent failed", e)
+            }
         }
 
-        // Require sign-in for sync
-        if (!SessionStore(this).isSignedIn()) {
-            promptSignIn()
+        // Require sign-in for sync. Guarded: a corrupt session store
+        // must never crash launch - fall back to the sign-in screen.
+        val signedIn = try {
+            SessionStore(this).isSignedIn()
+        } catch (e: Exception) {
+            android.util.Log.w("MakrydenDocs", "Session check failed; clearing", e)
+            try {
+                SessionStore(this).clear()
+            } catch (_: Exception) {
+            }
+            false
+        }
+        if (!signedIn) {
+            try {
+                promptSignIn()
+            } catch (e: Exception) {
+                android.util.Log.w("MakrydenDocs", "promptSignIn failed", e)
+            }
         }
     }
 
@@ -167,19 +194,33 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        val session = SessionStore(this)
-        val signInItem = menu.findItem(R.id.action_sign_in)
-        val signOutItem = menu.findItem(R.id.action_sign_out)
-        val accountItem = menu.findItem(R.id.action_account)
-        if (session.isSignedIn()) {
-            signInItem?.isVisible = false
-            signOutItem?.isVisible = true
-            accountItem?.isVisible = true
-            accountItem?.title = session.getEmail() ?: "Account"
-        } else {
-            signInItem?.isVisible = true
-            signOutItem?.isVisible = false
-            accountItem?.isVisible = false
+        try {
+            val session = SessionStore(this)
+            val signInItem = menu.findItem(R.id.action_sign_in)
+            val signOutItem = menu.findItem(R.id.action_sign_out)
+            val accountItem = menu.findItem(R.id.action_account)
+            val signedIn = try {
+                session.isSignedIn()
+            } catch (e: Exception) {
+                android.util.Log.w("MakrydenDocs", "Session check failed in menu", e)
+                false
+            }
+            if (signedIn) {
+                signInItem?.isVisible = false
+                signOutItem?.isVisible = true
+                accountItem?.isVisible = true
+                accountItem?.title = try {
+                    session.getEmail() ?: "Account"
+                } catch (e: Exception) {
+                    "Account"
+                }
+            } else {
+                signInItem?.isVisible = true
+                signOutItem?.isVisible = false
+                accountItem?.isVisible = false
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MakrydenDocs", "onPrepareOptionsMenu failed", e)
         }
         return super.onPrepareOptionsMenu(menu)
     }

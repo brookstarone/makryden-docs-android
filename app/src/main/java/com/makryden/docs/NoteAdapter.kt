@@ -40,23 +40,27 @@ class NoteAdapter(
         private val dateView: TextView = view.findViewById(R.id.note_date)
 
         fun bind(item: SupabaseClient.DocItem) {
-            // Pencil glyph (U+270E) as the note icon
-            icon.text = "\u270E"
-            titleView.text = item.title.ifEmpty { "Untitled" }
-            if (item.snippet.isEmpty()) {
-                snippetView.visibility = View.GONE
-            } else {
-                snippetView.visibility = View.VISIBLE
-                snippetView.text = item.snippet
+            try {
+                // Pencil glyph (U+270E) as the note icon
+                icon.text = "\u270E"
+                titleView.text = item.title.ifEmpty { "Untitled" }
+                if (item.snippet.isEmpty()) {
+                    snippetView.visibility = View.GONE
+                } else {
+                    snippetView.visibility = View.VISIBLE
+                    snippetView.text = item.snippet
+                }
+                val formatted = formatDate(item.updatedAt)
+                if (formatted.isEmpty()) {
+                    dateView.visibility = View.GONE
+                } else {
+                    dateView.visibility = View.VISIBLE
+                    dateView.text = formatted
+                }
+                itemView.setOnClickListener { onClick(item) }
+            } catch (e: Exception) {
+                android.util.Log.w("NoteAdapter", "Bind failed", e)
             }
-            val formatted = formatDate(item.updatedAt)
-            if (formatted.isEmpty()) {
-                dateView.visibility = View.GONE
-            } else {
-                dateView.visibility = View.VISIBLE
-                dateView.text = formatted
-            }
-            itemView.setOnClickListener { onClick(item) }
         }
     }
 

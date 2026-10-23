@@ -27,7 +27,11 @@ class SessionStore(context: Context) {
     }
 
     fun getAccessToken(): String? {
-        val json = prefs.getString(KEY_SESSION, null) ?: return null
+        val json = try {
+            prefs.getString(KEY_SESSION, null)
+        } catch (e: Exception) {
+            return null
+        } ?: return null
         return try {
             val obj = JSONObject(json)
             val exp = obj.optLong("exp", 0)
@@ -37,6 +41,12 @@ class SessionStore(context: Context) {
                 obj.optString("access", null)?.ifEmpty { null }
             }
         } catch (e: Exception) {
+            // Corrupt stored session: wipe it so we stop failing,
+            // then report signed-out instead of crashing.
+            try {
+                prefs.edit().remove(KEY_SESSION).apply()
+            } catch (_: Exception) {
+            }
             null
         }
     }

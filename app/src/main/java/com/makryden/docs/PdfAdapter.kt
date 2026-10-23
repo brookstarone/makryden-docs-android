@@ -32,14 +32,19 @@ class PdfAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val item = getItem(position)
-        holder.filename.text = item.title
-        // snippet holds the formatted size from SupabaseClient.getPdfs()
-        val size = item.snippet
-        val date = formatDate(item.updatedAt)
-        holder.meta.text = listOf(size, date).filter { it.isNotEmpty() }.joinToString("  \u00B7  ")
-        holder.icon.text = "\uD83D\uDCC4"
-        holder.itemView.setOnClickListener { onClick(item) }
+        try {
+            val item = getItem(position)
+            holder.filename.text = item.title.ifEmpty { "Untitled PDF" }
+            // snippet holds the formatted size from SupabaseClient.getPdfs()
+            val size = item.snippet
+            val date = formatDate(item.updatedAt)
+            holder.meta.text = listOf(size, date).filter { it.isNotEmpty() }.joinToString("  \u00B7  ")
+            holder.meta.visibility = if (holder.meta.text.isEmpty()) View.GONE else View.VISIBLE
+            holder.icon.text = "\uD83D\uDCC4"
+            holder.itemView.setOnClickListener { onClick(item) }
+        } catch (e: Exception) {
+            android.util.Log.w("PdfAdapter", "Bind failed at position $position", e)
+        }
     }
 
     private fun formatDate(iso: String): String {

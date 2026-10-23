@@ -32,18 +32,23 @@ class DocAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val item = getItem(position)
-        holder.title.text = item.title
-        holder.subtitle.text = item.snippet
-        holder.subtitle.visibility = if (item.snippet.isEmpty()) View.GONE else View.VISIBLE
-        holder.date.text = formatDate(item.updatedAt)
-        holder.icon.text = when (item.kind) {
-            "doc" -> "\uD83D\uDCDD" // memo
-            "note" -> "\uD83D\uDCDD" // memo
-            "pdf" -> "\uD83D\uDCC4" // page
-            else -> "\uD83D\uDCC4"
+        try {
+            val item = getItem(position)
+            holder.title.text = item.title.ifEmpty { "Untitled" }
+            holder.subtitle.text = item.snippet
+            holder.subtitle.visibility = if (item.snippet.isEmpty()) View.GONE else View.VISIBLE
+            holder.date.text = formatDate(item.updatedAt)
+            holder.date.visibility = if (holder.date.text.isEmpty()) View.GONE else View.VISIBLE
+            holder.icon.text = when (item.kind) {
+                "doc" -> "\uD83D\uDCDD" // memo
+                "note" -> "\uD83D\uDCDD" // memo
+                "pdf" -> "\uD83D\uDCC4" // page
+                else -> "\uD83D\uDCC4"
+            }
+            holder.itemView.setOnClickListener { onClick(item) }
+        } catch (e: Exception) {
+            android.util.Log.w("DocAdapter", "Bind failed at position $position", e)
         }
-        holder.itemView.setOnClickListener { onClick(item) }
     }
 
     private fun formatDate(iso: String): String {
