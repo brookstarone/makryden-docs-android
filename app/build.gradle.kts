@@ -11,30 +11,13 @@ android {
         applicationId = "com.makryden.docs"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
+        versionCode = 5
         versionName = "1.0.1"
     }
 
-    signingConfigs {
-        create("release") {
-            val ksPath = System.getenv("MKDOCS_KEYSTORE_PATH")
-            if (ksPath.isNullOrEmpty()) {
-                throw GradleException("MKDOCS_KEYSTORE_PATH not set - signing secrets missing!")
-            }
-            val ksFile = file(ksPath)
-            if (!ksFile.exists()) {
-                throw GradleException("Keystore not found at: " + ksPath)
-            }
-            storeFile = ksFile
-            storePassword = System.getenv("MKDOCS_KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("MKDOCS_KEY_ALIAS")
-            keyPassword = System.getenv("MKDOCS_KEY_PASSWORD")
-        }
-    }
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
         }
         debug {
             // debuggable true is the default for debug
