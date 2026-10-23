@@ -9,6 +9,7 @@ import android.text.TextWatcher
 import android.text.style.BulletSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
+import android.text.style.UnderlineSpan
 import android.util.TypedValue
 import android.view.Menu
 import android.view.MenuItem
@@ -82,7 +83,10 @@ class NoteEditorActivity : AppCompatActivity() {
         val buttons = listOf(
             "B" to { toggleStyle(Typeface.BOLD) },
             "I" to { toggleStyle(Typeface.ITALIC) },
+            "U" to { toggleUnderline() },
+            "S" to { toggleStrikethrough() },
             "\u2022" to { toggleBullet() },
+            "1." to { toggleNumberedList() },
             "\u2610" to { toggleChecklist() },
             "Clear" to { clearFormatting() }
         )
@@ -181,6 +185,51 @@ class NoteEditorActivity : AppCompatActivity() {
         dirty = true
     }
 
+    private fun toggleUnderline() {
+        val (start, end) = selection()
+        if (start == end) return
+        val spannable = contentEdit.text as Spannable
+        val existing = spannable.getSpans(start, end, UnderlineSpan::class.java)
+        if (existing.isNotEmpty()) {
+            for (span in existing) spannable.removeSpan(span)
+        } else {
+            spannable.setSpan(UnderlineSpan(), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        dirty = true
+    }
+
+    private fun toggleStrikethrough() {
+        val (start, end) = selection()
+        if (start == end) return
+        val spannable = contentEdit.text as Spannable
+        val existing = spannable.getSpans(start, end, StrikethroughSpan::class.java)
+        if (existing.isNotEmpty()) {
+            for (span in existing) spannable.removeSpan(span)
+        } else {
+            spannable.setSpan(StrikethroughSpan(), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        dirty = true
+    }
+
+    private fun toggleNumberedList() {
+        val spannable = contentEdit.text as Spannable
+        val text = spannable.toString()
+        val pos = contentEdit.selectionStart.coerceAtLeast(0)
+        var lineStart = pos
+        while (lineStart > 0 && text[lineStart - 1] != '\n') lineStart--
+        var lineEnd = pos
+        while (lineEnd < text.length && text[lineEnd] != '\n') lineEnd++
+        val line = text.substring(lineStart, lineEnd)
+        val numbered = Regex("^\\d+\\. ")
+        val match = numbered.find(line)
+        if (match != null) {
+            spannable.delete(lineStart, lineStart + match.value.length)
+        } else {
+            spannable.insert(lineStart, "1. ")
+        }
+        dirty = true
+    }
+
     private fun clearFormatting() {
         val (start, end) = selection()
         if (start == end) return
@@ -188,6 +237,7 @@ class NoteEditorActivity : AppCompatActivity() {
         for (span in spannable.getSpans(start, end, StyleSpan::class.java)) spannable.removeSpan(span)
         for (span in spannable.getSpans(start, end, BulletSpan::class.java)) spannable.removeSpan(span)
         for (span in spannable.getSpans(start, end, StrikethroughSpan::class.java)) spannable.removeSpan(span)
+        for (span in spannable.getSpans(start, end, UnderlineSpan::class.java)) spannable.removeSpan(span)
         dirty = true
     }
 
