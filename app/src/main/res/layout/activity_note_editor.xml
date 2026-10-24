@@ -53,27 +53,22 @@
         android:layout_height="1dp"
         android:background="#2A2145" />
 
-    <ScrollView
+    <!-- EditText scrolls itself: wrapping it in a ScrollView breaks touch,
+         cursor positioning, and the text-action popup. Do NOT re-add one. -->
+    <EditText
+        android:id="@+id/note_content"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
-
-        <EditText
-            android:id="@+id/note_content"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="400dp"
-            android:background="@null"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp"
-            android:lineSpacingExtra="4dp"
-            android:hint="Start typing..."
-            android:textColorHint="@color/sb_dim"
-            android:padding="16dp"
-            android:gravity="top"
-            android:inputType="textMultiLine"
-            android:scrollbars="vertical" />
-
-    </ScrollView>
+        android:layout_weight="1"
+        android:background="@null"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:lineSpacingExtra="4dp"
+        android:hint="Start typing..."
+        android:textColorHint="@color/sb_dim"
+        android:padding="16dp"
+        android:gravity="top"
+        android:inputType="textMultiLine|textCapSentences"
+        android:scrollbars="vertical" />
 
 </LinearLayout>

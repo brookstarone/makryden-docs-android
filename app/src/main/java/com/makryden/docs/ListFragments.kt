@@ -64,7 +64,7 @@ abstract class BaseListFragment : Fragment() {
         recycler.adapter = adapter
 
         swipeRefresh.setOnRefreshListener { refresh() }
-        fab.setOnClickListener { createItem() }
+        fab.setOnClickListener { if (!onFabClicked()) createItem() }
 
         refresh()
     }
@@ -196,6 +196,13 @@ abstract class BaseListFragment : Fragment() {
         }
     }
 
+    /**
+     * Override to handle the FAB tap directly (e.g. open a picker instead of
+     * creating a database row). Return true if handled; false falls through
+     * to createItem(). Runs on the main thread.
+     */
+    open fun onFabClicked(): Boolean = false
+
     private fun createItem() {
         val ctx = context ?: run {
             Log.w(TAG_LIST, "createItem dropped: fragment detached")
@@ -302,10 +309,16 @@ class NotesListFragment : BaseListFragment() {
 /** PDFs tab - saved PDFs from Supabase. */
 class PdfListFragment : BaseListFragment() {
     override fun loadItems(token: String) = SupabaseClient.getPdfs(token)
-    override fun createNew(token: String, userId: String): SupabaseClient.DocItem? {
-        // FAB opens the system file picker; the result is handled via activity result
+    override fun onFabClicked(): Boolean {
+        // Import an existing PDF: open the system file picker on the main
+        // thread. MainActivity's picker launcher opens the viewer on pick.
         (activity as? MainActivity)?.openPdfPicker()
-        return null // don't open an editor; the picker handles it
+        return true
+    }
+    override fun createNew(token: String, userId: String): SupabaseClient.DocItem? {
+        // Unreachable via FAB (onFabClicked handles it). Never launch the
+        // picker from here: createNew runs on a background thread.
+        return null
     }
     override fun emptyText() = "No saved PDFs yet. Tap + to open a PDF file."
 }

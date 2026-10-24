@@ -97,6 +97,10 @@ class NoteEditorActivity : AppCompatActivity() {
             btn.background = null
             btn.setPadding(28, 16, 28, 16)
             btn.textSize = 18f
+            // Never steal focus from the EditText: tapping a format button
+            // must not dismiss the keyboard or move the cursor.
+            btn.isFocusable = false
+            btn.isFocusableInTouchMode = false
             btn.setOnClickListener { action() }
             bar.addView(btn)
         }
@@ -247,9 +251,12 @@ class NoteEditorActivity : AppCompatActivity() {
             try {
                 val (title, text, _) = SupabaseClient.getNote(noteId, token)
                 runOnUiThread {
-                    titleEdit.setText(title)
-                    contentEdit.setText(text)
-                    dirty = false
+                    // Don't wipe text the user already typed while loading.
+                    if (!dirty) {
+                        titleEdit.setText(title)
+                        contentEdit.setText(text)
+                        dirty = false
+                    }
                 }
             } catch (e: Exception) {
                 runOnUiThread {

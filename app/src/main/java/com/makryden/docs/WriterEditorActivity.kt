@@ -61,6 +61,10 @@ class WriterEditorActivity : AppCompatActivity() {
     private var docId: String = ""
     private var isNew: Boolean = false
     private var dirty = false
+    // Throttle word-count updates: running a full-text regex split on every
+    // keystroke causes visible stutter on longer documents.
+    private val wordCountHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val wordCountRunnable = Runnable { updateWordCount() }
 
     private val imagePicker = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -114,7 +118,9 @@ class WriterEditorActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {
                 dirty = true
-                updateWordCount()
+                // Debounce: wait for a typing pause before recounting.
+                wordCountHandler.removeCallbacks(wordCountRunnable)
+                wordCountHandler.postDelayed(wordCountRunnable, 300)
             }
             override fun afterTextChanged(s: Editable?) {}
         }
@@ -154,6 +160,10 @@ class WriterEditorActivity : AppCompatActivity() {
             btn.setTextColor(Color.parseColor("#E8C266"))
             btn.background = null
             btn.setPadding(24, 16, 24, 16)
+            // Never steal focus from the EditText: tapping a format button
+            // must not dismiss the keyboard or move the cursor.
+            btn.isFocusable = false
+            btn.isFocusableInTouchMode = false
             btn.setOnClickListener { action() }
             bar.addView(btn)
         }
@@ -533,9 +543,12 @@ class WriterEditorActivity : AppCompatActivity() {
             try {
                 val (title, html) = SupabaseClient.getDocument(docId, token)
                 runOnUiThread {
-                    titleEdit.setText(title)
-                    contentEdit.text = HtmlConverter.fromHtml(html)
-                    dirty = false
+                    // Don't wipe text the user already typed while loading.
+                    if (!dirty) {
+                        titleEdit.setText(title)
+                        contentEdit.text = HtmlConverter.fromHtml(html)
+                        dirty = false
+                    }
                 }
             } catch (e: Exception) {
                 runOnUiThread {
