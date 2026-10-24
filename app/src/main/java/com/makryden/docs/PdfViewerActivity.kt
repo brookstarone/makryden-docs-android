@@ -26,12 +26,15 @@ import androidx.appcompat.widget.Toolbar
 import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import java.io.File
 import java.io.FileOutputStream
 
 /**
  * Native PDF viewer: PdfRenderer + pinch-to-zoom pages + annotation tools.
- * No WebView. Annotations persist as JSON in app files.
+ * No WebView. Annotations persist as JSON in app files AND can be burned
+ * into a real exported PDF via PdfExporter (Share auto-exports when
+ * annotations exist; menu offers "Export annotated PDF").
  */
 class PdfViewerActivity : AppCompatActivity() {
 
@@ -53,12 +56,26 @@ class PdfViewerActivity : AppCompatActivity() {
     private var pageCount = 0
     private var pdfFile: File? = null
     private var docId: String = ""
+    private var uriString: String? = null
+    // Stable key for the annotation sidecar file. Computed ONCE in onCreate:
+    // previously annotFile() used System.currentTimeMillis() for URI PDFs,
+    // so load and save used different files and signatures vanished on reopen.
+    private var annotKey: String = "unknown"
 
     private var currentTool: PdfAnnotations.Tool = PdfAnnotations.Tool.NONE
     private var currentColor: Int = Color.parseColor("#E8C266")
 
     // All annotations across pages
     private val allStrokes = mutableListOf<PdfAnnotations.Stroke>()
+
+    // AcroForm fields across pages (extracted on a background thread).
+    private var allFormFields: List<PdfFormFields.FormField> = emptyList()
+    private var formModeOn = false
+    private var hasXfa = false
+    // Master map of user-entered form values (name -> value). Overlay
+    // instances are recycled by the pager, so values must live here, not
+    // only in the per-page overlay.
+    private val masterFieldValues = mutableMapOf<String, String>()
 
     private val toolButtons = mutableMapOf<PdfAnnotations.Tool, ImageButton>()
     private val annotColors = intArrayOf(
@@ -73,10 +90,14 @@ class PdfViewerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_pdf_viewer)
+        // Required before any PDFBox call (font loading fails without it).
+        try { PDFBoxResourceLoader.init(applicationContext) } catch (e: Exception) { }
 
         val title = intent.getStringExtra(EXTRA_TITLE) ?: "PDF"
         docId = intent.getStringExtra(EXTRA_ID) ?: ""
         val uriString = intent.getStringExtra(EXTRA_URI)
+        this.uriString = uriString
+        annotKey = computeAnnotKey()
 
         toolbar = findViewById(R.id.toolbar)
         toolbar.title = title
@@ -110,11 +131,23 @@ class PdfViewerActivity : AppCompatActivity() {
                 }
                 if (pdfFile == null) throw Exception("No PDF source")
                 openRenderer(pdfFile!!)
+                try {
+                    allFormFields = PdfFormFields.extract(pdfFile!!)
+                    hasXfa = PdfFormFields.hasXfa(pdfFile!!)
+                } catch (e: Exception) { }
                 runOnUiThread {
                     progress.visibility = View.GONE
                     pageCount = renderer?.pageCount ?: 0
                     viewPager.adapter = PdfPageAdapter(this)
                     pageIndicator.text = if (pageCount > 0) "1 / $pageCount" else "0 / 0"
+                    invalidateOptionsMenu()
+                    if (allFormFields.isEmpty() && hasXfa) {
+                        Toast.makeText(
+                            this,
+                            "This form can't be filled in-app",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
             } catch (e: Exception) {
                 runOnUiThread {
@@ -218,9 +251,33 @@ class PdfViewerActivity : AppCompatActivity() {
 
     // ---------- Annotations persistence ----------
 
+    /**
+     * Stable sidecar key. Account PDFs use their docId (unchanged, so
+     * existing saved annotations keep loading). URI/shared PDFs use a
+     * SHA-256 hash of the URI string, so the SAME pdf maps to the SAME
+     * annotation file every time it is opened.
+     */
+    private fun computeAnnotKey(): String {
+        if (docId.isNotEmpty()) return docId
+        val uri = uriString
+        if (uri != null) {
+            return try {
+                val digest = java.security.MessageDigest.getInstance("SHA-256")
+                val hash = digest.digest(uri.toByteArray(Charsets.UTF_8))
+                val hex = StringBuilder()
+                for (i in 0 until 16) {
+                    hex.append(String.format("%02x", hash[i]))
+                }
+                "uri_$hex"
+            } catch (e: Exception) {
+                "uri_" + uri.hashCode().toString().replace("-", "n")
+            }
+        }
+        return "unknown"
+    }
+
     private fun annotFile(): File {
-        val key = if (docId.isNotEmpty()) docId else "local_${System.currentTimeMillis()}"
-        return File(filesDir, "pdf_annot_$key.json")
+        return File(filesDir, "pdf_annot_$annotKey.json")
     }
 
     private fun loadAnnotations() {
@@ -326,6 +383,102 @@ class PdfViewerActivity : AppCompatActivity() {
         }
     }
 
+    private fun closeRenderer() {
+        try { renderer?.close() } catch (e: Exception) { }
+        try { parcelFd?.close() } catch (e: Exception) { }
+        renderer = null
+        parcelFd = null
+    }
+
+    // ---------- Form filling ----------
+
+    private fun toggleFormMode() {
+        formModeOn = !formModeOn
+        (viewPager.adapter as? PdfPageAdapter)?.setFormMode(formModeOn)
+        invalidateOptionsMenu()
+        Toast.makeText(
+            this,
+            if (formModeOn) "Fill form: tap a field" else "Fill form off",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    /** Short display name: last segment, without [0] indices. */
+    private fun fieldDisplayName(field: PdfFormFields.FormField): String {
+        val last = field.name.substringAfterLast('.')
+        return last.replace(Regex("\\[\\d+\\]"), "").ifEmpty { field.name }
+    }
+
+    private fun showFieldEditDialog(field: PdfFormFields.FormField, overlay: PdfFormOverlayView) {
+        val input = EditText(this).apply {
+            setText(overlay.fieldValues[field.name] ?: field.currentValue)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(fieldDisplayName(field))
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                overlay.setFieldValue(field.name, input.text.toString())
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showFieldChoiceDialog(field: PdfFormFields.FormField, overlay: PdfFormOverlayView) {
+        val opts = field.options.toTypedArray()
+        if (opts.isEmpty()) return
+        val current = overlay.fieldValues[field.name] ?: field.currentValue
+        val checked = opts.indexOf(current)
+        AlertDialog.Builder(this)
+            .setTitle(fieldDisplayName(field))
+            .setSingleChoiceItems(opts, checked) { dialog, which ->
+                overlay.setFieldValue(field.name, opts[which])
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Save user-entered values back into a copy of the PDF and reopen it. */
+    private fun saveFilledForm() {
+        val file = pdfFile ?: return
+        if (masterFieldValues.isEmpty()) {
+            Toast.makeText(this, "No changes to save", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val values = masterFieldValues.toMap()
+        progress.visibility = View.VISIBLE
+        Thread {
+            try {
+                val out = File(cacheDir, "filled_${System.currentTimeMillis()}.pdf")
+                val saved = PdfFormFields.saveFilled(file, values, out)
+                runOnUiThread {
+                    progress.visibility = View.GONE
+                    if (saved != null) {
+                        closeRenderer()
+                        pdfFile = saved
+                        openRenderer(saved)
+                        try { allFormFields = PdfFormFields.extract(saved) } catch (e: Exception) { }
+                        masterFieldValues.clear()
+                        pageCount = renderer?.pageCount ?: 0
+                        viewPager.adapter = PdfPageAdapter(this)
+                        pageIndicator.text = if (pageCount > 0) "1 / $pageCount" else "0 / 0"
+                        invalidateOptionsMenu()
+                        Toast.makeText(this, "Filled form saved", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    progress.visibility = View.GONE
+                    Toast.makeText(this, "Save failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
     // ---------- Menu ----------
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -333,17 +486,91 @@ class PdfViewerActivity : AppCompatActivity() {
         return true
     }
 
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        val hasFields = allFormFields.isNotEmpty()
+        menu.findItem(R.id.action_fill_form)?.isVisible = hasFields
+        menu.findItem(R.id.action_fill_form)?.isChecked = formModeOn
+        menu.findItem(R.id.action_save_filled)?.isVisible = hasFields
+        return super.onPrepareOptionsMenu(menu)
+    }
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             android.R.id.home -> { onBackPressed(); true }
             R.id.action_highlight -> { selectTool(PdfAnnotations.Tool.HIGHLIGHT); true }
             R.id.action_share -> { sharePdf(); true }
+            R.id.action_export -> { exportAnnotatedCopy(); true }
+            R.id.action_fill_form -> { toggleFormMode(); true }
+            R.id.action_save_filled -> { saveFilledForm(); true }
             else -> super.onOptionsItemSelected(item)
         }
     }
 
     private fun sharePdf() {
         val file = pdfFile ?: return
+        if (allStrokes.isEmpty()) {
+            shareFile(file)
+            return
+        }
+        // Annotations exist: export a copy with them burned in, then share it.
+        progress.visibility = View.VISIBLE
+        Thread {
+            try {
+                val out = File(cacheDir, "annotated_share_${System.currentTimeMillis()}.pdf")
+                PdfExporter.export(file, allStrokes.toList(), out)
+                runOnUiThread {
+                    progress.visibility = View.GONE
+                    shareFile(out)
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    progress.visibility = View.GONE
+                    Toast.makeText(
+                        this,
+                        "Export failed (${e.message}); sharing original instead",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    shareFile(file)
+                }
+            }
+        }.start()
+    }
+
+    /** Exports the annotated PDF into app files and offers it for sharing. */
+    private fun exportAnnotatedCopy() {
+        val file = pdfFile ?: return
+        if (allStrokes.isEmpty()) {
+            Toast.makeText(this, "No annotations yet - nothing to export", Toast.LENGTH_SHORT).show()
+            return
+        }
+        progress.visibility = View.VISIBLE
+        Thread {
+            try {
+                val base = (toolbar.title?.toString() ?: "document")
+                    .replace(Regex("[^A-Za-z0-9._-]+"), "_")
+                    .take(60)
+                    .ifEmpty { "document" }
+                val out = File(filesDir, base + "_annotated.pdf")
+                PdfExporter.export(file, allStrokes.toList(), out)
+                runOnUiThread {
+                    progress.visibility = View.GONE
+                    Toast.makeText(
+                        this,
+                        "Annotated PDF saved: $base" + "_annotated.pdf",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    shareFile(out)
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    progress.visibility = View.GONE
+                    Toast.makeText(this, "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun shareFile(file: File) {
         try {
             val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
             val intent = Intent(Intent.ACTION_SEND).apply {
@@ -393,12 +620,15 @@ class PdfViewerActivity : AppCompatActivity() {
     inner class PageViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val imageView: ZoomableImageView = view.findViewById(R.id.page_image)
         val overlay: PdfAnnotationView = view.findViewById(R.id.annotation_overlay)
+        val formOverlay: PdfFormOverlayView = view.findViewById(R.id.form_overlay)
+        var boundPosition: Int = -1
     }
 
     inner class PdfPageAdapter(private val ctx: Context) :
         RecyclerView.Adapter<PageViewHolder>() {
 
         private val overlays = mutableMapOf<Int, PdfAnnotationView>()
+        private val formOverlays = mutableMapOf<Int, PdfFormOverlayView>()
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PageViewHolder {
             val view = LayoutInflater.from(ctx).inflate(R.layout.item_pdf_page, parent, false)
@@ -408,12 +638,17 @@ class PdfViewerActivity : AppCompatActivity() {
         override fun getItemCount(): Int = pageCount
 
         override fun onBindViewHolder(holder: PageViewHolder, position: Int) {
+            holder.boundPosition = position
             holder.imageView.setImageDrawable(null)
             Thread {
                 val width = 1080
                 val bitmap = renderPage(position, width)
                 holder.imageView.post {
-                    if (bitmap != null) holder.imageView.setImageBitmap(bitmap)
+                    // Guard: holder may have been recycled to another page
+                    // while rendering. Never paint a stale bitmap over it.
+                    if (bitmap != null && holder.boundPosition == position) {
+                        holder.imageView.setImageBitmap(bitmap)
+                    }
                 }
             }.start()
 
@@ -428,15 +663,57 @@ class PdfViewerActivity : AppCompatActivity() {
                 showTextNoteDialog(nx, ny, holder.overlay)
             }
             overlays[position] = holder.overlay
+
+            // Form overlay (third layer, above annotations). Both overlays
+            // overwrite imageView.onMatrixChanged in syncWith, so set one
+            // combined listener that invalidates both.
+            holder.formOverlay.syncWith(holder.imageView)
+            holder.imageView.onMatrixChanged = {
+                holder.overlay.invalidate()
+                holder.formOverlay.invalidate()
+            }
+            val pageFields = allFormFields.filter { it.pageIndex == position }
+            holder.formOverlay.fields = pageFields
+            holder.formOverlay.seedFrom(pageFields)
+            // Re-apply user edits (overlay instances are recycled).
+            for ((k, v) in masterFieldValues) {
+                if (pageFields.any { it.name == k }) holder.formOverlay.fieldValues[k] = v
+            }
+            holder.formOverlay.invalidate()
+            holder.formOverlay.formMode = formModeOn
+            holder.formOverlay.onValueChanged = { name, value ->
+                masterFieldValues[name] = value
+            }
+            holder.formOverlay.onTextFieldTapped = { f ->
+                showFieldEditDialog(f, holder.formOverlay)
+            }
+            holder.formOverlay.onChoiceTapped = { f ->
+                showFieldChoiceDialog(f, holder.formOverlay)
+            }
+            formOverlays[position] = holder.formOverlay
         }
 
         override fun onViewRecycled(holder: PageViewHolder) {
             super.onViewRecycled(holder)
-            overlays.remove(holder.bindingAdapterPosition)
+            // Use the stored bound position: bindingAdapterPosition may
+            // already be NO_POSITION at recycle time, leaving stale entries.
+            if (holder.boundPosition >= 0) {
+                overlays.remove(holder.boundPosition)
+                formOverlays.remove(holder.boundPosition)
+            }
+            holder.boundPosition = -1
         }
 
         fun forEachOverlay(action: (PdfAnnotationView) -> Unit) {
             for (o in overlays.values) action(o)
+        }
+
+        fun forEachFormOverlay(action: (PdfFormOverlayView) -> Unit) {
+            for (o in formOverlays.values) action(o)
+        }
+
+        fun setFormMode(on: Boolean) {
+            for (o in formOverlays.values) o.formMode = on
         }
     }
 }

@@ -11,8 +11,8 @@ android {
         applicationId = "com.makryden.docs"
         minSdk = 26
         targetSdk = 34
-        versionCode = 10
-        versionName = "2.0.3"
+        versionCode = 12
+        versionName = "2.0.4"
     }
 
     buildTypes {
@@ -40,4 +40,5 @@ dependencies {
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.viewpager2:viewpager2:1.1.0")
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 }

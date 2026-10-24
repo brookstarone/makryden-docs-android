@@ -15,4 +15,9 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <com.makryden.docs.PdfFormOverlayView
+        android:id="@+id/form_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
 </FrameLayout>

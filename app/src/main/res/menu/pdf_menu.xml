@@ -9,4 +9,15 @@
         android:id="@+id/action_share"
         android:title="Share"
         android:icon="@drawable/ic_share" />
+    <item
+        android:id="@+id/action_export"
+        android:title="Export annotated PDF"
+        android:icon="@drawable/ic_share" />
+    <item
+        android:id="@+id/action_fill_form"
+        android:title="Fill form"
+        android:checkable="true" />
+    <item
+        android:id="@+id/action_save_filled"
+        android:title="Save filled form" />
 </menu>
