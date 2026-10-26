@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.makryden.docs.data.DocsRepository
 
 private const val TAG_LIST = "DocsList"
 
@@ -36,6 +37,7 @@ abstract class BaseListFragment : Fragment() {
     abstract fun loadItems(token: String): List<SupabaseClient.DocItem>
     abstract fun createNew(token: String, userId: String): SupabaseClient.DocItem?
     abstract fun emptyText(): String
+    abstract fun kind(): String
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -112,24 +114,79 @@ abstract class BaseListFragment : Fragment() {
             Log.w(TAG_LIST, "SessionStore failed", e)
             return
         }
-        val token = try {
-            session.getAccessToken()
-        } catch (e: Exception) {
-            Log.w(TAG_LIST, "getAccessToken failed", e)
-            null
-        }
-        if (token == null) {
-            // Not signed in - show empty. MainActivity owns the auth gate.
-            progress.visibility = View.GONE
-            swipeRefresh.isRefreshing = false
-            showEmpty()
-            return
-        }
         progress.visibility = View.VISIBLE
         emptyView.visibility = View.GONE
         Thread {
+            // Token acquisition happens here, on the background thread:
+            // getValidAccessTokenBlocking() may refresh over the network
+            // and must never run on the main thread.
+            val token = try {
+                session.getValidAccessTokenBlocking()
+            } catch (e: Exception) {
+                Log.w(TAG_LIST, "getValidAccessTokenBlocking failed", e)
+                null
+            }
+            if (token == null) {
+                // Not signed in (or refresh failed) - show empty.
+                // Do NOT clear the session here; the 401 path below still
+                // owns expiry handling. MainActivity owns the auth gate.
+                val act = activity
+                if (act == null || !isAdded) {
+                    Log.w(TAG_LIST, "Fragment detached before signed-out state posted; dropping")
+                    return@Thread
+                }
+                act.runOnUiThread {
+                    if (!isAdded) return@runOnUiThread
+                    progress.visibility = View.GONE
+                    swipeRefresh.isRefreshing = false
+                    showEmpty()
+                }
+                return@Thread
+            }
+            // Offline-first: show cached items immediately, then refresh
+            // from the network. Cached items stay on screen if the
+            // network load fails.
+            val repo = try {
+                DocsRepository(ctx)
+            } catch (e: Exception) {
+                Log.w(TAG_LIST, "DocsRepository failed", e)
+                null
+            }
+            var cached: List<SupabaseClient.DocItem> = emptyList()
+            if (repo != null) {
+                cached = try {
+                    repo.getCachedItems(kind())
+                } catch (e: Exception) {
+                    Log.w(TAG_LIST, "getCachedItems failed", e)
+                    emptyList()
+                }
+            }
+            if (cached.isNotEmpty()) {
+                val cachedItems = cached
+                val act = activity
+                if (act != null && isAdded) {
+                    act.runOnUiThread {
+                        if (!isAdded) return@runOnUiThread
+                        try {
+                            progress.visibility = View.GONE
+                            swipeRefresh.isRefreshing = false
+                            adapter.submitList(cachedItems)
+                            emptyView.visibility = View.GONE
+                        } catch (e: Exception) {
+                            Log.w(TAG_LIST, "Cached list UI update failed", e)
+                        }
+                    }
+                }
+            }
             try {
                 val items = loadItems(token)
+                if (repo != null) {
+                    try {
+                        repo.cacheItems(kind(), items)
+                    } catch (e: Exception) {
+                        Log.w(TAG_LIST, "cacheItems failed", e)
+                    }
+                }
                 val act = activity
                 if (act == null || !isAdded) {
                     Log.w(TAG_LIST, "Fragment detached before list load finished; dropping result")
@@ -156,6 +213,11 @@ abstract class BaseListFragment : Fragment() {
                     if (!isAdded) return@runOnUiThread
                     progress.visibility = View.GONE
                     swipeRefresh.isRefreshing = false
+                    if (cached.isNotEmpty()) {
+                        // Keep showing the cached list silently: no toast,
+                        // no empty state. The next refresh retries.
+                        return@runOnUiThread
+                    }
                     val msg = e.message ?: ""
                     val c = context
                     if (msg.contains("401") || msg.contains("unauthorized") || msg.contains("JWT")) {
@@ -214,30 +276,44 @@ abstract class BaseListFragment : Fragment() {
             Log.w(TAG_LIST, "SessionStore failed", e)
             return
         }
-        val token = try {
-            session.getAccessToken()
-        } catch (e: Exception) {
-            null
-        }
-        val userId = try {
-            session.getUserId()
-        } catch (e: Exception) {
-            null
-        }
-        if (token == null || userId == null) {
-            try {
-                Toast.makeText(ctx, "Please sign in first", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Log.w(TAG_LIST, "Toast failed", e)
-            }
-            return
-        }
         try {
             Toast.makeText(ctx, "Creating...", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Log.w(TAG_LIST, "Toast failed", e)
         }
         Thread {
+            // Token and user ID are fetched here, on the background
+            // thread: getValidAccessTokenBlocking() may refresh over
+            // the network and must never run on the main thread.
+            val token = try {
+                session.getValidAccessTokenBlocking()
+            } catch (e: Exception) {
+                Log.w(TAG_LIST, "getValidAccessTokenBlocking failed", e)
+                null
+            }
+            val userId = try {
+                session.getUserId()
+            } catch (e: Exception) {
+                null
+            }
+            if (token == null || userId == null) {
+                val act = activity
+                if (act == null || !isAdded) {
+                    Log.w(TAG_LIST, "Fragment detached before sign-in toast; dropping")
+                    return@Thread
+                }
+                act.runOnUiThread {
+                    if (!isAdded) return@runOnUiThread
+                    val c = context
+                    if (c != null) {
+                        try {
+                            Toast.makeText(c, "Please sign in first", Toast.LENGTH_SHORT).show()
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+                return@Thread
+            }
             try {
                 val item = createNew(token, userId)
                 val act = activity
@@ -289,6 +365,7 @@ abstract class BaseListFragment : Fragment() {
 /** Documents tab - writer documents from Supabase. */
 class DocumentListFragment : BaseListFragment() {
     override fun loadItems(token: String) = SupabaseClient.getDocuments(token)
+    override fun kind() = "doc"
     override fun createNew(token: String, userId: String): SupabaseClient.DocItem? {
         val id = SupabaseClient.createDocument(token, userId)
         return SupabaseClient.DocItem(id, "Untitled document", "", "", "doc")
@@ -299,6 +376,7 @@ class DocumentListFragment : BaseListFragment() {
 /** Notes tab - notes from Supabase. */
 class NotesListFragment : BaseListFragment() {
     override fun loadItems(token: String) = SupabaseClient.getNotes(token)
+    override fun kind() = "note"
     override fun createNew(token: String, userId: String): SupabaseClient.DocItem? {
         val id = SupabaseClient.createNote(token, userId)
         return SupabaseClient.DocItem(id, "Untitled", "", "", "note")
@@ -309,6 +387,7 @@ class NotesListFragment : BaseListFragment() {
 /** PDFs tab - saved PDFs from Supabase. */
 class PdfListFragment : BaseListFragment() {
     override fun loadItems(token: String) = SupabaseClient.getPdfs(token)
+    override fun kind() = "pdf"
     override fun onFabClicked(): Boolean {
         // Import an existing PDF: open the system file picker on the main
         // thread. MainActivity's picker launcher opens the viewer on pick.

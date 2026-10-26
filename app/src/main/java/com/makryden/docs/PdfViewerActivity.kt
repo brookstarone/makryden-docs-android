@@ -323,7 +323,7 @@ class PdfViewerActivity : AppCompatActivity() {
 
     private fun downloadPdf(id: String): File {
         val session = SessionStore(this)
-        val token = session.getAccessToken() ?: throw Exception("Not signed in")
+        val token = session.getValidAccessTokenBlocking() ?: throw Exception("Not signed in")
         val anonKey = getAnonKey()
 
         val url = java.net.URL(

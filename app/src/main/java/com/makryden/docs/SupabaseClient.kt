@@ -168,6 +168,19 @@ object SupabaseClient {
         }
     }
 
+    /** Refresh an expired access token with a refresh token. Returns new auth tokens. Throws on failure. */
+    fun refreshToken(refreshToken: String): AuthResult {
+        try {
+            val body = JSONObject()
+            body.put("refresh_token", refreshToken)
+            val resp = post("/auth/v1/token?grant_type=refresh_token", body)
+            return parseAuthResult(resp, "")
+        } catch (e: Exception) {
+            Log.e(TAG, "refreshToken failed: ${e.message}")
+            throw Exception("Token refresh failed: ${e.message}")
+        }
+    }
+
     private fun parseAuthResult(json: String, email: String): AuthResult {
         try {
             val obj = JSONObject(json)
@@ -367,12 +380,12 @@ object SupabaseClient {
         }
     }
 
-    /** Update a document's title and HTML content. Never throws. */
-    fun updateDocument(id: String, token: String, title: String, contentHtml: String) {
+    /** Update a document's title and HTML content. Never throws. Returns true on success, false on any failure. */
+    fun updateDocument(id: String, token: String, title: String, contentHtml: String): Boolean {
         try {
             if (id.isEmpty()) {
                 Log.e(TAG, "updateDocument: empty id, skipping")
-                return
+                return false
             }
             val body = JSONObject()
             body.put("title", title)
@@ -387,11 +400,13 @@ object SupabaseClient {
                 writer.close()
             } catch (e: Exception) {
                 Log.e(TAG, "updateDocument: write failed: ${e.message}")
-                return
+                return false
             }
             readResponse(conn)
+            return true
         } catch (e: Exception) {
             Log.e(TAG, "updateDocument failed: ${e.message}")
+            return false
         }
     }
 
@@ -416,12 +431,12 @@ object SupabaseClient {
         }
     }
 
-    /** Update a note's title and text. Never throws. */
-    fun updateNote(id: String, token: String, title: String, text: String) {
+    /** Update a note's title and text. Never throws. Returns true on success, false on any failure. */
+    fun updateNote(id: String, token: String, title: String, text: String): Boolean {
         try {
             if (id.isEmpty()) {
                 Log.e(TAG, "updateNote: empty id, skipping")
-                return
+                return false
             }
             val body = JSONObject()
             body.put("title", title)
@@ -435,11 +450,13 @@ object SupabaseClient {
                 writer.close()
             } catch (e: Exception) {
                 Log.e(TAG, "updateNote: write failed: ${e.message}")
-                return
+                return false
             }
             readResponse(conn)
+            return true
         } catch (e: Exception) {
             Log.e(TAG, "updateNote failed: ${e.message}")
+            return false
         }
     }
 

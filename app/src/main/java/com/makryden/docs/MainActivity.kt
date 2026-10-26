@@ -12,6 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.makryden.docs.sync.SyncScheduler
 
 /**
  * Makryden Docs - fully native app.
@@ -116,22 +117,70 @@ class MainActivity : AppCompatActivity() {
 
         // Require sign-in for sync. Guarded: a corrupt session store
         // must never crash launch - fall back to the sign-in screen.
-        val signedIn = try {
-            SessionStore(this).isSignedIn()
+        val session = try {
+            SessionStore(this)
         } catch (e: Exception) {
             android.util.Log.w("MakrydenDocs", "Session check failed; clearing", e)
             try {
                 SessionStore(this).clear()
             } catch (_: Exception) {
             }
+            null
+        }
+        val signedIn = try {
+            session?.isSignedIn() ?: false
+        } catch (e: Exception) {
+            android.util.Log.w("MakrydenDocs", "Session check failed; clearing", e)
+            try {
+                session?.clear()
+            } catch (_: Exception) {
+            }
             false
         }
-        if (!signedIn) {
+        if (signedIn) {
+            // Proceed as today; the lists load with a fresh token.
+        } else if (session != null && (try {
+            session.hasRefreshToken()
+        } catch (e: Exception) {
+            android.util.Log.w("MakrydenDocs", "Refresh-token check failed", e)
+            false
+        })) {
+            // A refresh token exists but the access token is expired or
+            // missing: try a silent refresh on a background thread
+            // instead of bouncing straight to the sign-in screen.
+            val refreshSession = session
+            Thread {
+                val token = try {
+                    refreshSession.getValidAccessTokenBlocking()
+                } catch (e: Exception) {
+                    android.util.Log.w("MakrydenDocs", "Token refresh failed", e)
+                    null
+                }
+                runOnUiThread {
+                    try {
+                        if (token != null) {
+                            updateAccountUi()
+                            refreshCurrentTab()
+                        } else {
+                            promptSignIn()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("MakrydenDocs", "promptSignIn failed", e)
+                    }
+                }
+            }.start()
+        } else {
             try {
                 promptSignIn()
             } catch (e: Exception) {
                 android.util.Log.w("MakrydenDocs", "promptSignIn failed", e)
             }
+        }
+        // Drain any sync queue left over from an earlier session.
+        try {
+            SyncScheduler.enqueuePending(this)
+        } catch (e: Exception) {
+            android.util.Log.w("MakrydenDocs", "Sync enqueue failed", e)
         }
     }
 

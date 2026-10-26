@@ -18,6 +18,8 @@ import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import com.makryden.docs.data.DocsRepository
+import com.makryden.docs.sync.SyncScheduler
 
 /**
  * Native note editor. Title + content with basic formatting
@@ -246,8 +248,16 @@ class NoteEditorActivity : AppCompatActivity() {
     }
 
     private fun loadNote() {
-        val token = SessionStore(this).getAccessToken() ?: return
+        val session = SessionStore(this)
         Thread {
+            // Token fetch happens here, on the background thread:
+            // getValidAccessTokenBlocking() may refresh over the
+            // network and must never run on the main thread.
+            val token = try {
+                session.getValidAccessTokenBlocking()
+            } catch (e: Exception) {
+                null
+            } ?: return@Thread
             try {
                 val (title, text, _) = SupabaseClient.getNote(noteId, token)
                 runOnUiThread {
@@ -268,26 +278,80 @@ class NoteEditorActivity : AppCompatActivity() {
 
     private fun saveNote() {
         val session = SessionStore(this)
-        val token = session.getAccessToken()
-        val userId = session.getUserId()
-        if (token == null) {
-            Toast.makeText(this, "Please sign in first", Toast.LENGTH_SHORT).show()
-            return
-        }
         val title = titleEdit.text.toString()
         val text = contentEdit.text.toString()
         Toast.makeText(this, "Saving...", Toast.LENGTH_SHORT).show()
         Thread {
             try {
+                // Token fetch happens here, on the background thread:
+                // getValidAccessTokenBlocking() may refresh over the
+                // network and must never run on the main thread.
+                val token = try {
+                    session.getValidAccessTokenBlocking()
+                } catch (e: Exception) {
+                    null
+                }
+                if (token == null) {
+                    runOnUiThread {
+                        Toast.makeText(this, "Please sign in first", Toast.LENGTH_SHORT).show()
+                    }
+                    return@Thread
+                }
+                val userId = try {
+                    session.getUserId()
+                } catch (e: Exception) {
+                    null
+                }
                 if (isNew) {
                     if (userId == null) throw Exception("No user ID")
                     noteId = SupabaseClient.createNote(token, userId)
                     isNew = false
                 }
-                SupabaseClient.updateNote(noteId, token, title, text)
-                runOnUiThread {
-                    dirty = false
-                    Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
+                // A thrown update is treated like a false return: the
+                // edit is queued, not lost. Create failures above still
+                // reach the outer catch and keep today's toast.
+                val synced = try {
+                    SupabaseClient.updateNote(noteId, token, title, text)
+                } catch (e: Exception) {
+                    android.util.Log.w("MakrydenDocs", "updateNote failed", e)
+                    false
+                }
+                val repo = try {
+                    DocsRepository(applicationContext)
+                } catch (e: Exception) {
+                    android.util.Log.w("MakrydenDocs", "DocsRepository failed", e)
+                    null
+                }
+                if (synced) {
+                    if (repo != null) {
+                        try {
+                            repo.cacheItem(SupabaseClient.DocItem(noteId, title, "", "", "note"), text)
+                        } catch (e: Exception) {
+                            android.util.Log.w("MakrydenDocs", "cacheItem failed", e)
+                        }
+                    }
+                    runOnUiThread {
+                        dirty = false
+                        Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    if (repo != null) {
+                        try {
+                            repo.queueUpdate("note", noteId, title, text)
+                            repo.cacheItem(SupabaseClient.DocItem(noteId, title, "", "", "note"), text)
+                        } catch (e: Exception) {
+                            android.util.Log.w("MakrydenDocs", "queueUpdate failed", e)
+                        }
+                    }
+                    runOnUiThread {
+                        dirty = false
+                        Toast.makeText(this, "Saved on this phone - will sync when you are back online", Toast.LENGTH_SHORT).show()
+                    }
+                    try {
+                        SyncScheduler.enqueuePending(this)
+                    } catch (e: Exception) {
+                        android.util.Log.w("MakrydenDocs", "Sync enqueue failed", e)
+                    }
                 }
             } catch (e: Exception) {
                 runOnUiThread {
