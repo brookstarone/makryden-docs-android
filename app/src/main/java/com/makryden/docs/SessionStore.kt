@@ -24,10 +24,13 @@ class SessionStore(context: Context) {
 
     private val encryptedPrefs: SharedPreferences? = try {
         val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+        // Overload 2: create(String alias, String file, Context, keyScheme, valueScheme).
+        // getOrCreate returns a String alias, NOT a MasterKey object, so the
+        // (Context, String, MasterKey, ...) overload does not apply.
         EncryptedSharedPreferences.create(
-            context,
-            ENCRYPTED_FILE,
             masterKeyAlias,
+            ENCRYPTED_FILE,
+            appContext,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
