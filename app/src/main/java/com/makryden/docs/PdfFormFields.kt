@@ -170,17 +170,19 @@ object PdfFormFields {
 
     // ---------- Helpers ----------
 
-    private fun kindOf(field: PDField): Kind = when (field) {
-        is PDTextField -> Kind.TEXT
-        is PDCheckBox -> Kind.CHECKBOX
-        is PDRadioButton -> Kind.RADIO
-        is PDChoice -> Kind.CHOICE
-        else -> {
-            val type = field.fieldType ?: return Kind.UNKNOWN
-            when {
-                type.equals("Btn", ignoreCase = true) -> Kind.BUTTON
-                type.equals("Sig", ignoreCase = true) -> Kind.SIGNATURE
-                else -> Kind.UNKNOWN
+    private fun kindOf(field: PDField): Kind {
+        return when (field) {
+            is PDTextField -> Kind.TEXT
+            is PDCheckBox -> Kind.CHECKBOX
+            is PDRadioButton -> Kind.RADIO
+            is PDChoice -> Kind.CHOICE
+            else -> {
+                val type = field.fieldType ?: return Kind.UNKNOWN
+                when {
+                    type.equals("Btn", ignoreCase = true) -> Kind.BUTTON
+                    type.equals("Sig", ignoreCase = true) -> Kind.SIGNATURE
+                    else -> Kind.UNKNOWN
+                }
             }
         }
     }
@@ -188,7 +190,7 @@ object PdfFormFields {
     private fun optionsOf(field: PDField): List<String> = try {
         when (field) {
             is PDChoice -> field.options ?: emptyList()
-            is PDRadioButton -> field.onValues ?: emptyList()
+            is PDRadioButton -> field.onValues?.toList() ?: emptyList()
             else -> emptyList()
         }
     } catch (e: Exception) { emptyList() }
