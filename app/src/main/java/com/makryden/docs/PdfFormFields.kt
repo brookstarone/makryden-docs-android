@@ -8,6 +8,8 @@ import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget
 import com.tom_roush.pdfbox.pdmodel.interactive.form.PDCheckBox
 import com.tom_roush.pdfbox.pdmodel.interactive.form.PDChoice
 import com.tom_roush.pdfbox.pdmodel.interactive.form.PDField
+import com.tom_roush.pdfbox.pdmodel.interactive.form.PDNonTerminalField
+import com.tom_roush.pdfbox.cos.COSDictionary
 import com.tom_roush.pdfbox.pdmodel.interactive.form.PDRadioButton
 import com.tom_roush.pdfbox.pdmodel.interactive.form.PDTextField
 import java.io.File
@@ -88,6 +90,19 @@ object PdfFormFields {
                     Log.w(TAG, "Document contains XFA - dynamic XFA is not fillable via PDFBox")
                     // Still return AcroForm fields; XFA-only fields will be missing.
                 }
+                // Widget -> field map: PDAnnotationWidget.getParent() is commented
+                // out in this PDFBox-Android port, so resolve each widget's field
+                // via its shared COSDictionary (same parsed instance on both sides).
+                val widgetToField = mutableMapOf<COSDictionary, PDField>()
+                fun collectFields(field: PDField) {
+                    for (w in field.widgets) {
+                        widgetToField[w.cosObject] = field
+                    }
+                    if (field is PDNonTerminalField) {
+                        for (child in field.children) collectFields(child)
+                    }
+                }
+                for (f in form.fields) collectFields(f)
                 val pages = doc.pages
                 for (pageIndex in 0 until doc.numberOfPages) {
                     val page = pages.get(pageIndex)
@@ -97,9 +112,7 @@ object PdfFormFields {
                     if (pageW <= 0f || pageH <= 0f) continue
                     for (annot in page.annotations) {
                         if (annot !is PDAnnotationWidget) continue
-                        val field: PDField = try {
-                            annot.parent ?: continue
-                        } catch (e: Exception) { continue }
+                        val field: PDField = widgetToField[annot.cosObject] ?: continue
                         val rect = annot.rectangle ?: continue
                         // PDF (bottom-left origin) -> normalized (top-left origin)
                         val left = (rect.lowerLeftX / pageW).coerceIn(0f, 1f)
